@@ -16,6 +16,7 @@ class StyleAdapterConfig:
     alpha: float = 4.0
     dropout: float = 0.10
     max_scale: float = 0.20
+    initial_scale: float = 0.05
 
 
 class StyleSliceAdapter(nn.Module):
@@ -27,7 +28,8 @@ class StyleSliceAdapter(nn.Module):
         self.down = nn.Linear(config.input_dim, config.rank, bias=False)
         self.dropout = nn.Dropout(config.dropout)
         self.up = nn.Linear(config.rank, config.output_dim, bias=False)
-        self.gate_logit = nn.Parameter(torch.tensor(-8.0))
+        ratio = min(max(config.initial_scale / max(config.max_scale, 1e-6), 1e-6), 1.0 - 1e-6)
+        self.gate_logit = nn.Parameter(torch.logit(torch.tensor(ratio)))
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
@@ -84,12 +86,13 @@ def install_style_slice_adapter(
         checkpoint = torch.load(str(state_path), map_location="cpu")
         adapter.load_state_dict(checkpoint["adapter"] if "adapter" in checkpoint else checkpoint, strict=True)
 
-    for param in seed_model.parameters():
-        param.requires_grad = False
+    for module in _iter_modules(seed_model):
+        for param in module.parameters():
+            param.requires_grad = False
     for param in adapter.parameters():
         param.requires_grad = trainable
 
-    adapter.to(next(seed_model.parameters()).device)
+    adapter.to(base.weight.device)
     return adapter
 
 
@@ -97,3 +100,13 @@ def save_style_adapter(adapter: StyleSliceAdapter, path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"config": adapter.config.__dict__, "adapter": adapter.state_dict()}, path)
+
+
+def _iter_modules(seed_model: Any):
+    if isinstance(seed_model, nn.Module):
+        yield seed_model
+        return
+    if hasattr(seed_model, "values"):
+        for value in seed_model.values():
+            if isinstance(value, nn.Module):
+                yield value

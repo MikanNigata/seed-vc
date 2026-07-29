@@ -50,7 +50,7 @@ def run(args: argparse.Namespace) -> Path:
 
     adapter = install_style_slice_adapter(
         model,
-        config=StyleAdapterConfig(rank=args.rank, dropout=args.dropout),
+        config=StyleAdapterConfig(rank=args.rank, dropout=args.dropout, initial_scale=args.initial_scale),
         trainable=True,
     )
     model.cfm.eval()
@@ -118,6 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt-ratio", type=float, default=0.25)
     parser.add_argument("--rank", type=int, default=4)
     parser.add_argument("--dropout", type=float, default=0.10)
+    parser.add_argument("--initial-scale", type=float, default=0.05)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--grad-clip", type=float, default=1.0)

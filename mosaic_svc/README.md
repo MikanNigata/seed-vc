@@ -74,7 +74,20 @@ D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.train_style_adapt
   --manifest D:\voice-lab\out\mosaic_svc\manifests\canonical_manifest.csv `
   --canonical D:\voice-lab\data\target_clean\dadadada_tenshi_ref_25s.wav `
   --output D:\voice-lab\out\mosaic_svc\p0\adapter `
-  --steps 300
+  --steps 300 `
+  --initial-scale 0.05
+```
+
+Run A/B/C/D0 with LUFS-normalized outputs and metric CSV:
+
+```powershell
+D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.run_p0_suite `
+  --source D:\voice-lab\data\guide_vocals\ittai_itsukara_head_15s.wav `
+  --canonical D:\voice-lab\data\target_clean\dadadada_tenshi_ref_25s.wav `
+  --style-adapter D:\voice-lab\out\mosaic_svc\p0\adapter\style_adapter_final.pt `
+  --prototype-bank D:\voice-lab\out\mosaic_svc\p0\prototype_bank.pt `
+  --output D:\voice-lab\out\mosaic_svc\p0\suite_ittai15_steps20 `
+  --diffusion-steps 20
 ```
 
 ## P0 Comparison IDs

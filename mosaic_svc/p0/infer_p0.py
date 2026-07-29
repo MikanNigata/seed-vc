@@ -50,12 +50,20 @@ def run(args: argparse.Namespace) -> Path:
     device = seed_inference.device
 
     if args.style_adapter:
-        config = StyleAdapterConfig(rank=args.style_adapter_rank, dropout=args.style_adapter_dropout)
+        config = StyleAdapterConfig(
+            rank=args.style_adapter_rank,
+            dropout=args.style_adapter_dropout,
+            initial_scale=args.style_adapter_initial_scale,
+        )
         install_style_slice_adapter(model, config=config, state_path=args.style_adapter, trainable=False)
     elif args.install_zero_style_adapter:
         install_style_slice_adapter(
             model,
-            config=StyleAdapterConfig(rank=args.style_adapter_rank, dropout=args.style_adapter_dropout),
+            config=StyleAdapterConfig(
+                rank=args.style_adapter_rank,
+                dropout=args.style_adapter_dropout,
+                initial_scale=args.style_adapter_initial_scale,
+            ),
             trainable=False,
         )
 
@@ -204,6 +212,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--install-zero-style-adapter", type=str2bool, default=False)
     parser.add_argument("--style-adapter-rank", type=int, default=4)
     parser.add_argument("--style-adapter-dropout", type=float, default=0.10)
+    parser.add_argument("--style-adapter-initial-scale", type=float, default=0.05)
     parser.add_argument("--prototype-bank", default=None)
     parser.add_argument("--prototype-strength", type=float, default=1.0)
     parser.add_argument("--prototype-max-norm-ratio", type=float, default=0.10)
