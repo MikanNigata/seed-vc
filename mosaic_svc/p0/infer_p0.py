@@ -12,6 +12,7 @@ import torchaudio
 import inference as seed_inference
 from modules.commons import str2bool
 from mosaic_svc.p0.audio_features import extract_campplus_style, load_audio_tensor
+from mosaic_svc.p0.prompt_adapter import PromptAdapterConfig, install_prompt_adapter
 from mosaic_svc.p0.prototype_bank import PrototypeBank
 from mosaic_svc.p0.style_adapter import StyleAdapterConfig, install_style_slice_adapter
 
@@ -63,6 +64,32 @@ def run(args: argparse.Namespace) -> Path:
                 rank=args.style_adapter_rank,
                 dropout=args.style_adapter_dropout,
                 initial_scale=args.style_adapter_initial_scale,
+            ),
+            trainable=False,
+        )
+
+    if args.prompt_adapter:
+        install_prompt_adapter(
+            model,
+            config=PromptAdapterConfig(
+                rank=args.prompt_adapter_rank,
+                dropout=args.prompt_adapter_dropout,
+                initial_scale=args.prompt_adapter_initial_scale,
+                max_scale=args.prompt_adapter_max_scale,
+                source_only=args.prompt_adapter_source_only,
+            ),
+            state_path=args.prompt_adapter,
+            trainable=False,
+        )
+    elif args.install_zero_prompt_adapter:
+        install_prompt_adapter(
+            model,
+            config=PromptAdapterConfig(
+                rank=args.prompt_adapter_rank,
+                dropout=args.prompt_adapter_dropout,
+                initial_scale=args.prompt_adapter_initial_scale,
+                max_scale=args.prompt_adapter_max_scale,
+                source_only=args.prompt_adapter_source_only,
             ),
             trainable=False,
         )
@@ -180,13 +207,21 @@ def run(args: argparse.Namespace) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     source_name = Path(args.source).stem
     prompt_name = Path(args.prompt).stem
-    mode = "d0" if args.prototype_bank else ("c" if args.style_adapter or args.install_zero_style_adapter else "b")
+    if args.prompt_adapter:
+        mode = "m2"
+    elif args.prototype_bank:
+        mode = "d0"
+    elif args.style_adapter or args.install_zero_style_adapter:
+        mode = "c"
+    else:
+        mode = "b"
     out_path = out_dir / f"mosaic_p0_{mode}_{source_name}_{prompt_name}_{args.diffusion_steps}.wav"
     torchaudio.save(str(out_path), output_audio.cpu(), sr)
     print(f"Saved: {out_path}")
     print(f"Elapsed seconds: {time.time() - t0:.2f}")
     print(f"Style source: {style_audio}")
     print(f"Prototype bank: {args.prototype_bank or 'none'}")
+    print(f"Prompt adapter: {args.prompt_adapter or 'none'}")
     return out_path
 
 
@@ -213,6 +248,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--style-adapter-rank", type=int, default=4)
     parser.add_argument("--style-adapter-dropout", type=float, default=0.10)
     parser.add_argument("--style-adapter-initial-scale", type=float, default=0.05)
+    parser.add_argument("--prompt-adapter", default=None)
+    parser.add_argument("--install-zero-prompt-adapter", type=str2bool, default=False)
+    parser.add_argument("--prompt-adapter-rank", type=int, default=8)
+    parser.add_argument("--prompt-adapter-dropout", type=float, default=0.05)
+    parser.add_argument("--prompt-adapter-initial-scale", type=float, default=0.03)
+    parser.add_argument("--prompt-adapter-max-scale", type=float, default=0.20)
+    parser.add_argument("--prompt-adapter-source-only", type=str2bool, default=True)
     parser.add_argument("--prototype-bank", default=None)
     parser.add_argument("--prototype-strength", type=float, default=1.0)
     parser.add_argument("--prototype-max-norm-ratio", type=float, default=0.10)

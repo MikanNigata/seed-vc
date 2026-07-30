@@ -9,6 +9,10 @@ This fork keeps upstream Seed-VC intact and adds Mosaic-SVC as an extension pack
 - P0 inference-only CAMPPlus prototype correction.
 - P0 Style-Slice Adapter rank 4, installed by wrapping `cond_x_merge_linear`.
 - P0 Style-Slice Adapter training that updates only the adapter.
+- M1 prompt candidate sweep and prompt/style path ablation.
+- M2 Prompt Adapter, installed by wrapping `cond_x_merge_linear` with a prompt mel/condition/style residual branch.
+- M3 Prompt Adapter training over frozen Seed-VC using high-quality singing clips only.
+- M4 dialogue CAMPPlus speaker profile extraction and high-quality prompt reranking.
 - R1.6 data audit and admission CSV generation.
 - R1.6 minimal F0/LUFS-proxy evaluation.
 - R1.6 streaming module interfaces for Content Student, L1 Prototype Memory, Acoustic Converter, and NSF vocoder stub.
@@ -24,6 +28,42 @@ This fork keeps upstream Seed-VC intact and adds Mosaic-SVC as an extension pack
 - Level 2 mid-block K/V correction.
 
 Those parts now have explicit module boundaries and training contracts, but they still need datasets and training runs.
+
+## M1-M4 Current Result
+
+The dialogue profile is built from the cleaned 25-minute dialogue file, but dialogue audio is not used as an acoustic teacher.
+
+```text
+D:\voice-lab\out\mosaic_svc\speaker_profiles\maneki_dialogue25_campplus.pt
+D:\voice-lab\out\mosaic_svc\speaker_profiles\maneki_dialogue25_campplus.csv
+```
+
+Prompt reranking by dialogue speaker profile ranked the 12-second Dadadada prompt candidates as:
+
+```text
+01 prompt_05_048.00s sim=0.425142 score=0.594224
+02 prompt_07_072.00s sim=0.423787 score=0.584651
+03 prompt_08_084.00s sim=0.387137 score=0.554121
+04 prompt_03_024.00s sim=0.483816 score=0.545296
+05 prompt_06_060.00s sim=0.346047 score=0.529108
+```
+
+Initial M2/M3 evaluation used P05 as canonical because it was the top dialogue-profile rerank candidate.
+
+```text
+D:\voice-lab\out\mosaic_svc\p0\m1_m2_compare_p05_cfg050_steps60\M1_P05_raw_lufs.wav
+D:\voice-lab\out\mosaic_svc\p0\m1_m2_compare_p05_cfg050_steps60\M2_P05_prompt_adapter_lufs.wav
+D:\voice-lab\out\mosaic_svc\p0\m1_m2_compare_p05_cfg050_steps60\metrics.csv
+```
+
+Metrics from the first 300-step Prompt Adapter run:
+
+```text
+M1 raw: f0_corr=0.992921 cent_rmse=54.45 uv_mismatch=0.136997
+M2 adapter: f0_corr=0.994056 cent_rmse=50.68 uv_mismatch=0.147833
+```
+
+This is not a production-quality improvement yet. It is a controlled first check that prompt-path adaptation can move the model without immediately damaging F0.
 
 ## P0 Commands
 
@@ -120,6 +160,39 @@ D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.run_prompt_sweep 
   --diffusion-steps 20
 ```
 
+Build a dialogue speaker profile and rerank high-quality prompt candidates:
+
+```powershell
+D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.build_speaker_profile `
+  --input D:\voice-lab\out\dialogue\maneki_karaoke_stream\maneki_dialogue_strict_denoised.wav `
+  --output D:\voice-lab\out\mosaic_svc\speaker_profiles\maneki_dialogue25_campplus.pt `
+  --max-segments 96
+
+D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.rank_prompts_by_profile `
+  --manifest D:\voice-lab\out\mosaic_svc\p0\prompt_candidates\dadadada_12s\prompt_candidates.csv `
+  --profile D:\voice-lab\out\mosaic_svc\speaker_profiles\maneki_dialogue25_campplus.pt `
+  --output D:\voice-lab\out\mosaic_svc\p0\prompt_candidates\dadadada_12s\prompt_ranked_by_dialogue_profile.csv
+```
+
+Train and run the M2 Prompt Adapter:
+
+```powershell
+D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.train_prompt_adapter `
+  --manifest D:\voice-lab\out\mosaic_svc\p0\prompt_candidates\dadadada_12s\prompt_candidates.csv `
+  --canonical D:\voice-lab\out\mosaic_svc\p0\prompt_candidates\dadadada_12s\prompt_05_048.00s.wav `
+  --output D:\voice-lab\out\mosaic_svc\p0\prompt_adapter_p05_singing_only `
+  --steps 300
+
+D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.infer_p0 `
+  --source D:\voice-lab\data\guide_vocals\ittai_itsukara_head_15s.wav `
+  --prompt D:\voice-lab\out\mosaic_svc\p0\prompt_candidates\dadadada_12s\prompt_05_048.00s.wav `
+  --prompt-adapter D:\voice-lab\out\mosaic_svc\p0\prompt_adapter_p05_singing_only\prompt_adapter_final.pt `
+  --output D:\voice-lab\out\mosaic_svc\p0\m2_p05_adapter_cfg050_steps60 `
+  --diffusion-steps 60 `
+  --inference-cfg-rate 0.50 `
+  --prompt-seconds 12
+```
+
 ## P0 Comparison IDs
 
 - `A`: upstream Seed-VC zero-shot.
@@ -127,6 +200,10 @@ D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.run_prompt_sweep 
 - `C`: B plus Style-Slice Adapter.
 - `D0`: C plus inference-only CAMPPlus prototype correction.
 - `D1`: optional future light training of prototype/gate after D0 passes.
+- `M1`: best fixed prompt from prompt sweep/rerank, no adapter.
+- `M2`: M1 plus Prompt Adapter.
+- `M3`: M2 adapter trained on high-quality singing clips only.
+- `M4`: dialogue-derived speaker profile used for prompt selection/reranking, not acoustic training.
 
 ## Design Constraint
 
