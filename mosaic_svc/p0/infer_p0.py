@@ -80,6 +80,7 @@ def run(args: argparse.Namespace) -> Path:
             ),
             state_path=args.prompt_adapter,
             trainable=False,
+            strength=args.prompt_adapter_strength,
         )
     elif args.install_zero_prompt_adapter:
         install_prompt_adapter(
@@ -92,6 +93,7 @@ def run(args: argparse.Namespace) -> Path:
                 source_only=args.prompt_adapter_source_only,
             ),
             trainable=False,
+            strength=args.prompt_adapter_strength,
         )
 
     source_audio_np = librosa.load(args.source, sr=sr)[0]
@@ -254,6 +256,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt-adapter-dropout", type=float, default=0.05)
     parser.add_argument("--prompt-adapter-initial-scale", type=float, default=0.03)
     parser.add_argument("--prompt-adapter-max-scale", type=float, default=0.20)
+    parser.add_argument("--prompt-adapter-strength", type=float, default=1.0)
     parser.add_argument("--prompt-adapter-source-only", type=str2bool, default=True)
     parser.add_argument("--prototype-bank", default=None)
     parser.add_argument("--prototype-strength", type=float, default=1.0)

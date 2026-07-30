@@ -65,6 +65,37 @@ M2 adapter: f0_corr=0.994056 cent_rmse=50.68 uv_mismatch=0.147833
 
 This is not a production-quality improvement yet. It is a controlled first check that prompt-path adaptation can move the model without immediately damaging F0.
 
+Follow-up listening feedback selected P05 over the previous P06 direction. A 40-second P05 comparison was generated:
+
+```text
+D:\voice-lab\out\mosaic_svc\p0\m1_m2_compare_p05_ittai40_cfg050_steps60\M1_P05_raw_ittai40_lufs.wav
+D:\voice-lab\out\mosaic_svc\p0\m1_m2_compare_p05_ittai40_cfg050_steps60\M2_P05_prompt_adapter_ittai40_lufs.wav
+D:\voice-lab\out\mosaic_svc\p0\m1_m2_compare_p05_ittai40_cfg050_steps60\metrics.csv
+```
+
+```text
+M1 P05 raw 40s: f0_corr=0.968344 cent_rmse=92.98 uv_mismatch=0.139872
+M2 P05 adapter 40s: f0_corr=0.994381 cent_rmse=84.41 uv_mismatch=0.224898
+```
+
+Current decision: keep P05 as canonical, but treat the Prompt Adapter as too strong until a lower-gate variant proves it does not increase UV errors.
+
+Use `--prompt-adapter-strength` at inference time to test lower adapter strength without retraining.
+
+The first lower-strength check used `--prompt-adapter-strength 0.5` and is the current best numeric candidate:
+
+```text
+D:\voice-lab\share_audio\mosaic_M2_P05_prompt_adapter_s050_ittai40_cfg050_steps60.mp3
+```
+
+```text
+M1 P05 raw 40s: f0_corr=0.968344 cent_rmse=92.98 uv_mismatch=0.139872
+M2 P05 adapter strength 0.5: f0_corr=0.996016 cent_rmse=48.94 uv_mismatch=0.123041
+M2 P05 adapter strength 1.0: f0_corr=0.994381 cent_rmse=84.41 uv_mismatch=0.224898
+```
+
+Current decision: use P05 + Prompt Adapter strength 0.5 as the next listening candidate.
+
 ## P0 Commands
 
 Audit target clips:

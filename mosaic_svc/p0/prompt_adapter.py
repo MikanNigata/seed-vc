@@ -59,6 +59,7 @@ class PromptConditionedMerge(nn.Module):
         self.base = base
         self.adapter = adapter
         self.config = config
+        self.strength = 1.0
         for param in self.base.parameters():
             param.requires_grad = False
 
@@ -80,7 +81,7 @@ class PromptConditionedMerge(nn.Module):
         denom = prompt_mask.sum(dim=1).clamp_min(1.0)
         prompt_mel_summary = (prompt_mel * prompt_mask).sum(dim=1) / denom
         prompt_cond_summary = (prompt_cond * prompt_mask).sum(dim=1) / denom
-        delta = self.adapter(prompt_mel_summary, prompt_cond_summary, style).unsqueeze(1)
+        delta = self.adapter(prompt_mel_summary, prompt_cond_summary, style).unsqueeze(1) * self.strength
 
         if cfg.source_only:
             delta = delta * (1.0 - prompt_mask)
@@ -92,6 +93,7 @@ def install_prompt_adapter(
     config: PromptAdapterConfig | None = None,
     state_path: str | Path | None = None,
     trainable: bool = False,
+    strength: float = 1.0,
 ) -> PromptSliceAdapter:
     """Install the M2 prompt-aware residual branch on a loaded Seed-VC model."""
 
@@ -108,6 +110,7 @@ def install_prompt_adapter(
         adapter = PromptSliceAdapter(config)
         wrapper = PromptConditionedMerge(base, adapter, config)
         estimator.cond_x_merge_linear = wrapper
+    wrapper.strength = strength
 
     if state_path:
         checkpoint = torch.load(str(state_path), map_location="cpu")
