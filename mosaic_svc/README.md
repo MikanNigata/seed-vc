@@ -90,6 +90,36 @@ D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.run_p0_suite `
   --diffusion-steps 20
 ```
 
+Run prompt/style path ablation:
+
+```powershell
+D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.run_path_ablation `
+  --source D:\voice-lab\data\guide_vocals\ittai_itsukara_head_15s.wav `
+  --prompt-a D:\voice-lab\data\target_clean\dadadada_tenshi_ref_25s.wav `
+  --style-a D:\voice-lab\data\target_clean\dadadada_tenshi_ref_25s.wav `
+  --prompt-b D:\voice-lab\data\seedvc_refs\maneki_primary_ref.wav `
+  --style-b D:\voice-lab\data\seedvc_refs\maneki_primary_ref.wav `
+  --output D:\voice-lab\out\mosaic_svc\p0\path_ablation_ittai15_dadadada_vs_maneki_steps20 `
+  --diffusion-steps 20
+```
+
+Build and sweep prompt candidates:
+
+```powershell
+D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.build_prompt_candidates `
+  --input D:\voice-lab\data\target_clean\dadadada_tenshi_vocal.wav `
+  --output-dir D:\voice-lab\out\mosaic_svc\p0\prompt_candidates\dadadada_12s `
+  --seconds 12 `
+  --hop-seconds 12 `
+  --max-candidates 8
+
+D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.run_prompt_sweep `
+  --source D:\voice-lab\data\guide_vocals\ittai_itsukara_head_15s.wav `
+  --manifest D:\voice-lab\out\mosaic_svc\p0\prompt_candidates\dadadada_12s\prompt_candidates.csv `
+  --output D:\voice-lab\out\mosaic_svc\p0\prompt_sweep_ittai15_dadadada_12s_steps20 `
+  --diffusion-steps 20
+```
+
 ## P0 Comparison IDs
 
 - `A`: upstream Seed-VC zero-shot.
