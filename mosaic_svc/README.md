@@ -96,6 +96,19 @@ M2 P05 adapter strength 1.0: f0_corr=0.994381 cent_rmse=84.41 uv_mismatch=0.2248
 
 Current decision: use P05 + Prompt Adapter strength 0.5 as the next listening candidate.
 
+Longer prompt check: a 24-second prompt spanning 48s-72s of the same high-quality target song outperformed the 12-second P05 prompt numerically without using an adapter.
+
+```text
+D:\voice-lab\share_audio\mosaic_M1_P48_72_24s_prompt_ittai40_cfg050_steps60.mp3
+```
+
+```text
+M1 P05 12s prompt: f0_corr=0.968344 cent_rmse=92.98 uv_mismatch=0.139872
+M1 48-72s 24s prompt: f0_corr=0.996700 cent_rmse=44.93 uv_mismatch=0.073418
+```
+
+Current decision after this check: prioritize high-quality prompt mel/semantic selection before adding adapters. The 24-second 48s-72s prompt is the next practical candidate to listen to.
+
 ## P0 Commands
 
 Audit target clips:
