@@ -53,7 +53,7 @@ def run(args: argparse.Namespace) -> Path:
         config=StyleAdapterConfig(rank=args.rank, dropout=args.dropout, initial_scale=args.initial_scale),
         trainable=True,
     )
-    model.cfm.eval()
+    model.cfm.train()
     model.cfm.estimator.class_dropout_prob = 0.0
     adapter.train()
 

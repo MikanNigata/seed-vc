@@ -59,7 +59,7 @@ def run(args: argparse.Namespace) -> Path:
         ),
         trainable=True,
     )
-    model.cfm.eval()
+    model.cfm.train()
     model.cfm.estimator.class_dropout_prob = 0.0
     adapter.train()
 

@@ -487,7 +487,9 @@ class DiT(torch.nn.Module):
         class_dropout = False
         if self.training and torch.rand(1) < self.class_dropout_prob:
             class_dropout = True
-        if not self.training and mask_content:
+        # Training CFM passes prompt_lens as the legacy seventh argument. Only an
+        # explicit boolean should request classifier-free content masking.
+        if not self.training and isinstance(mask_content, bool) and mask_content:
             class_dropout = True
         # cond_in_module = self.cond_embedder if self.content_type == 'discrete' else self.cond_projection
         cond_in_module = self.cond_projection

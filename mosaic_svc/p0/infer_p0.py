@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import random
 import time
 from pathlib import Path
 
@@ -15,6 +16,16 @@ from mosaic_svc.p0.audio_features import extract_campplus_style, load_audio_tens
 from mosaic_svc.p0.prompt_adapter import PromptAdapterConfig, install_prompt_adapter
 from mosaic_svc.p0.prototype_bank import PrototypeBank
 from mosaic_svc.p0.style_adapter import StyleAdapterConfig, install_style_slice_adapter
+from mosaic_svc.p4.prompt_mel_lora import PromptMelLoRAConfig, install_prompt_mel_lora
+from mosaic_svc.p5.kv_lora import install_kv_lora
+
+
+def _seed_all(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def _semantic_with_overlap(semantic_fn, waves_16k: torch.Tensor, max_seconds: int = 30, overlap_seconds: int = 5):
@@ -46,6 +57,7 @@ def _style_from_audio(campplus_model, path: str, sr: int, device: torch.device, 
 
 @torch.no_grad()
 def run(args: argparse.Namespace) -> Path:
+    _seed_all(args.seed)
     model, semantic_fn, f0_fn, vocoder_fn, campplus_model, mel_fn, mel_fn_args = seed_inference.load_models(args)
     sr = mel_fn_args["sampling_rate"]
     device = seed_inference.device
@@ -67,6 +79,22 @@ def run(args: argparse.Namespace) -> Path:
             ),
             trainable=False,
         )
+
+    if args.prompt_mel_lora:
+        install_prompt_mel_lora(
+            model,
+            config=PromptMelLoRAConfig(
+                rank=args.prompt_mel_lora_rank,
+                dropout=args.prompt_mel_lora_dropout,
+                initial_scale=args.prompt_mel_lora_initial_scale,
+                max_scale=args.prompt_mel_lora_max_scale,
+            ),
+            state_path=args.prompt_mel_lora,
+            trainable=False,
+        )
+
+    if args.kv_lora:
+        install_kv_lora(model, state_path=args.kv_lora, trainable=False)
 
     if args.prompt_adapter:
         install_prompt_adapter(
@@ -163,6 +191,9 @@ def run(args: argparse.Namespace) -> Path:
     if max_source_window <= 0:
         raise ValueError("prompt is too long for max_context_window; reduce --prompt-seconds")
 
+    # Model/adapter construction consumes RNG. Reset here so ablations use the
+    # exact same diffusion noise regardless of which optional modules are loaded.
+    _seed_all(args.seed)
     processed_frames = 0
     generated_wave_chunks = []
     previous_chunk = None
@@ -209,7 +240,13 @@ def run(args: argparse.Namespace) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     source_name = Path(args.source).stem
     prompt_name = Path(args.prompt).stem
-    if args.prompt_adapter:
+    if args.kv_lora and args.style_adapter:
+        mode = "p8"
+    elif args.kv_lora:
+        mode = "p5"
+    elif args.prompt_mel_lora:
+        mode = "p4"
+    elif args.prompt_adapter:
         mode = "m2"
     elif args.prototype_bank:
         mode = "d0"
@@ -224,6 +261,8 @@ def run(args: argparse.Namespace) -> Path:
     print(f"Style source: {style_audio}")
     print(f"Prototype bank: {args.prototype_bank or 'none'}")
     print(f"Prompt adapter: {args.prompt_adapter or 'none'}")
+    print(f"Prompt-mel LoRA: {args.prompt_mel_lora or 'none'}")
+    print(f"K/V LoRA: {args.kv_lora or 'none'}")
     return out_path
 
 
@@ -245,6 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt-seconds", type=float, default=25.0)
     parser.add_argument("--max-context-seconds", type=int, default=30)
     parser.add_argument("--overlap-frames", type=int, default=16)
+    parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--style-adapter", default=None)
     parser.add_argument("--install-zero-style-adapter", type=str2bool, default=False)
     parser.add_argument("--style-adapter-rank", type=int, default=4)
@@ -262,6 +302,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prototype-strength", type=float, default=1.0)
     parser.add_argument("--prototype-max-norm-ratio", type=float, default=0.10)
     parser.add_argument("--prototype-max-gate", type=float, default=0.25)
+    parser.add_argument("--prompt-mel-lora", default=None)
+    parser.add_argument("--prompt-mel-lora-rank", type=int, default=8)
+    parser.add_argument("--prompt-mel-lora-dropout", type=float, default=0.05)
+    parser.add_argument("--prompt-mel-lora-initial-scale", type=float, default=0.02)
+    parser.add_argument("--prompt-mel-lora-max-scale", type=float, default=0.10)
+    parser.add_argument("--kv-lora", default=None)
     return parser
 
 

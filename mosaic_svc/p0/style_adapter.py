@@ -73,6 +73,9 @@ def install_style_slice_adapter(
 ) -> StyleSliceAdapter:
     """Install the P0 style-only residual branch on a loaded Seed-VC model."""
 
+    checkpoint = torch.load(str(state_path), map_location="cpu") if state_path else None
+    if checkpoint and "config" in checkpoint:
+        config = StyleAdapterConfig(**checkpoint["config"])
     estimator = seed_model.cfm.estimator
     base = estimator.cond_x_merge_linear
     if isinstance(base, StyleConditionedMerge):
@@ -82,8 +85,7 @@ def install_style_slice_adapter(
         adapter = StyleSliceAdapter(config)
         estimator.cond_x_merge_linear = StyleConditionedMerge(base, adapter, config.input_dim)
 
-    if state_path:
-        checkpoint = torch.load(str(state_path), map_location="cpu")
+    if checkpoint:
         adapter.load_state_dict(checkpoint["adapter"] if "adapter" in checkpoint else checkpoint, strict=True)
 
     for module in _iter_modules(seed_model):
