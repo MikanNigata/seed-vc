@@ -252,3 +252,41 @@ D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.infer_p0 `
 ## Design Constraint
 
 The 44.1 kHz Seed-VC SVC model uses prompt semantic, prompt mel, and CAMPPlus global style. Mosaic-SVC P0 only adapts the CAMPPlus style path first. It does not add raw mel residuals or acoustic patch retrieval.
+
+## P4-P8 Adaptation Result
+
+The current practical default combines two frozen-base adapters:
+
+- P6: rank-8 K/V-only LoRA on Transformer layers 4, 8, and 12, checkpoint step 600.
+- P7: rank-4 CAMPPlus global Style-Slice Adapter, checkpoint step 600.
+- P8: both adapters enabled with the fixed P07 canonical prompt.
+
+On three unseen 15-second song clips, the high-quality singing CAMPPlus profile improved from `0.712374` to `0.724428`, while the quality score improved from `0.920236` to `0.925862`.
+
+Train P7 with song-separated validation:
+
+```powershell
+python -m mosaic_svc.p7.train_style_slice `
+  --train-manifest train_manifest.csv `
+  --validation-manifest validation_manifest.csv `
+  --canonical canonical_mid.wav `
+  --canonical canonical_high.wav `
+  --output out\p7 `
+  --steps 800
+```
+
+Run the combined adaptation:
+
+```powershell
+python -m mosaic_svc.p0.infer_p0 `
+  --source input.wav `
+  --prompt canonical_high.wav `
+  --kv-lora out\p6\kv_lora_step_000600.pt `
+  --style-adapter out\p7\style_adapter_step_000600.pt `
+  --diffusion-steps 60 `
+  --inference-cfg-rate 0.50 `
+  --seed 1234 `
+  --output out\p8
+```
+
+Use a high-quality singing profile as the primary singing-identity metric. The low-quality dialogue profile is auxiliary because microphone quality and speech register can reverse adaptation rankings.
