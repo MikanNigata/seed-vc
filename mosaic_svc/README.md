@@ -290,3 +290,21 @@ python -m mosaic_svc.p0.infer_p0 `
 ```
 
 Use a high-quality singing profile as the primary singing-identity metric. The low-quality dialogue profile is auxiliary because microphone quality and speech register can reverse adaptation rankings.
+
+## P10 Identity-Aware Adaptation
+
+P10 continues training only the Style-Slice Adapter through frozen BigVGAN and frozen CAMPPlus. The objective is CFM reconstruction plus a small cosine loss against a high-quality singing identity centroid.
+
+```powershell
+python -m mosaic_svc.p10.train_identity_aware `
+  --train-manifest train_manifest.csv `
+  --validation-manifest validation_manifest.csv `
+  --canonical canonical_high.wav `
+  --style-adapter out\p7\style_adapter_step_000600.pt `
+  --kv-lora out\p6\kv_lora_step_000600.pt `
+  --identity-profile out\singing_identity.pt `
+  --output out\p10 `
+  --steps 100
+```
+
+On the same three held-out clips, P10 slightly improved identity, quality, UV mismatch, and aggregate rerank over P8 while keeping F0 metrics effectively unchanged. It is accepted under the No-Harm rule without further weight sweeping.

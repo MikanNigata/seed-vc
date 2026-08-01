@@ -5,6 +5,7 @@ from torch import nn
 
 from mosaic_svc.p0.style_adapter import StyleAdapterConfig, StyleConditionedMerge, StyleSliceAdapter
 from mosaic_svc.p5.kv_lora import FusedQKVLoRA, KVLoRAConfig
+from mosaic_svc.p10.train_identity_aware import _speaker_embedding
 
 
 def test_style_slice_is_noop_at_zero_initialization() -> None:
@@ -28,3 +29,16 @@ def test_fused_qkv_lora_preserves_query_slice() -> None:
     actual = adapter(x)
     torch.testing.assert_close(actual[..., :12], expected[..., :12])
     assert not torch.allclose(actual[..., 12:], expected[..., 12:])
+
+
+def test_identity_feature_path_is_differentiable() -> None:
+    class TinySpeaker(torch.nn.Module):
+        def forward(self, feature: torch.Tensor) -> torch.Tensor:
+            pooled = feature.mean(dim=1)
+            return torch.cat([pooled, pooled, pooled[:, :32]], dim=-1)
+
+    waveform = torch.randn(1, 16000, requires_grad=True)
+    embedding = _speaker_embedding(TinySpeaker(), waveform, 16000)
+    embedding.square().sum().backward()
+    assert waveform.grad is not None
+    assert torch.isfinite(waveform.grad).all()
