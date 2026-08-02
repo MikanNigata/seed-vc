@@ -26,7 +26,7 @@ This fork keeps upstream Seed-VC intact and adds Mosaic-SVC as an extension pack
 
 ## Implementation Versus Checkpoints
 
-The R1.6 module and training paths are implemented. A first real-data P11-P16 run was trained on about 52 seconds of approved singing, with 24-second validation and test partitions. It produces voiced output on unseen songs, but remains an experimental checkpoint because only one target song is available. Synthetic smoke checkpoints only prove execution and are not listenable models.
+The R1.6 module and training paths are implemented. A first real-data P11-P16 run was trained on about 52 seconds of approved singing, with 24-second validation and test partitions. Although it produced voiced output and strong F0 metrics on unseen songs, listening quality was unacceptable. The checkpoint is a documented No-Go and must not replace the P10 Seed-VC default. Synthetic smoke checkpoints only prove execution and are not listenable models.
 
 Level 2 K/V correction is already implemented in P6 and remains conditional. Level 3 mel/spectral residual retrieval remains intentionally excluded by design.
 
