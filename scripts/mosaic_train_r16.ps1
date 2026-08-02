@@ -2,8 +2,10 @@ param(
     [Parameter(Mandatory=$true)][string]$DatasetDir,
     [Parameter(Mandatory=$true)][string]$IdentityProfile,
     [Parameter(Mandatory=$true)][string]$OutputDir,
+    [string]$PrototypeBank,
     [int]$StudentSteps = 2000,
     [int]$ConverterSteps = 3000,
+    [int]$RefinerSteps = 1500,
     [int]$ApSteps = 1500,
     [int]$NsfSteps = 4000
 )
@@ -20,18 +22,28 @@ foreach ($Path in @($Train, $Validation, $IdentityProfile)) {
 
 $P13 = Join-Path $OutputDir "p13_student"
 $P14 = Join-Path $OutputDir "p14_converter"
+$P14Refiner = Join-Path $OutputDir "p14_refiner"
 $P15Ap = Join-Path $OutputDir "p15_ap"
 $P15Nsf = Join-Path $OutputDir "p15_nsf"
+$PrototypeArgs = @()
+if ($PrototypeBank) {
+    if (-not (Test-Path $PrototypeBank)) { throw "Prototype bank not found: $PrototypeBank" }
+    $PrototypeArgs = @("--prototype-bank", $PrototypeBank)
+}
 
 & $Python -m mosaic_svc.p13.train_student --train-manifest $Train --validation-manifest $Validation --output $P13 --steps $StudentSteps
 if ($LASTEXITCODE -ne 0) { throw "P13 student training failed with exit code $LASTEXITCODE" }
 
 $Student = Join-Path $P13 "content_student_best.pt"
-& $Python -m mosaic_svc.p14.train_converter --train-manifest $Train --validation-manifest $Validation --identity-profile $IdentityProfile --student $Student --output $P14 --steps $ConverterSteps
+& $Python -m mosaic_svc.p14.train_converter --train-manifest $Train --validation-manifest $Validation --identity-profile $IdentityProfile --student $Student --output $P14 --steps $ConverterSteps @PrototypeArgs
 if ($LASTEXITCODE -ne 0) { throw "P14 converter training failed with exit code $LASTEXITCODE" }
 
 $Converter = Join-Path $P14 "streaming_converter_best.pt"
-& $Python -m mosaic_svc.p15.train_ap --train-manifest $Train --validation-manifest $Validation --identity-profile $IdentityProfile --converter $Converter --output $P15Ap --steps $ApSteps
+& $Python -m mosaic_svc.p14.train_refiner --train-manifest $Train --validation-manifest $Validation --identity-profile $IdentityProfile --student $Student --converter $Converter --output $P14Refiner --steps $RefinerSteps @PrototypeArgs
+if ($LASTEXITCODE -ne 0) { throw "P14 refiner training failed with exit code $LASTEXITCODE" }
+
+$Refiner = Join-Path $P14Refiner "acoustic_refiner_best.pt"
+& $Python -m mosaic_svc.p15.train_ap --train-manifest $Train --validation-manifest $Validation --identity-profile $IdentityProfile --converter $Converter --refiner $Refiner --output $P15Ap --steps $ApSteps @PrototypeArgs
 if ($LASTEXITCODE -ne 0) { throw "P15 AP training failed with exit code $LASTEXITCODE" }
 
 & $Python -m mosaic_svc.p15.train_nsf --train-manifest $Train --validation-manifest $Validation --output $P15Nsf --steps $NsfSteps

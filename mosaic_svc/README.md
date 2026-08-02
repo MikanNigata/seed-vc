@@ -17,16 +17,18 @@ This fork keeps upstream Seed-VC intact and adds Mosaic-SVC as an extension pack
 - R1.6 minimal F0/LUFS-proxy evaluation.
 - P11 ContentVec + Whisper gated teacher fusion and bounded De-Timbre Adapter.
 - P11 timbre-perturbation training and warmup GRL pretraining for external multi-speaker data.
-- P12 path-by-path linear/MLP speaker leakage probes.
-- P13 causal Content Student with dynamic chunks and multi-loss distillation.
-- P14 explicit F0/UV/confidence/slope/energy/phonation bus and causal acoustic converter.
+- P12 path-by-path linear/MLP probes, centroid verification EER, and ContentVec retention metrics.
+- P13 causal Content Student with dynamic chunks, multi-loss distillation, and optional frozen-probe leakage suppression.
+- P14 explicit F0/UV/confidence/slope/energy/phonation bus, causal acoustic converter, and optional bounded residual refiner.
 - P15 causal target AP Head and trainable harmonic-noise NSF vocoder with persistent phase.
 - P16 file renderer, Gradio GUI, and queued live microphone runtime.
+- P16 end-to-end RTF, elapsed-time, and peak-VRAM benchmark reporting.
+- Shared bounded L1 Prototype Memory conditioning across P14, P15, and P16.
 - One-pass dataset preparation and sequential R1.6 training scripts.
 
 ## Implementation Versus Checkpoints
 
-The R1.6 module and training paths are implemented. A first real-data P11-P16 run was trained on about 52 seconds of approved singing, with 24-second validation and test partitions. Although it produced voiced output and strong F0 metrics on unseen songs, listening quality was unacceptable. The checkpoint is a documented No-Go and must not replace the P10 Seed-VC default. Synthetic smoke checkpoints only prove execution and are not listenable models.
+The R1.6 module and training paths are implemented. A first real-data P11-P16 run was trained on about 52 seconds of approved singing, with 24-second validation and test partitions. Although it produced voiced output and strong F0 metrics on unseen songs, listening quality was unacceptable. The checkpoint is a documented No-Go and must not replace the P10 Seed-VC default. The Prototype and Refiner paths added after that result are disabled unless their checkpoints are explicitly supplied; implementation does not imply a quality pass. Synthetic smoke checkpoints only prove execution and are not listenable models.
 
 Level 2 K/V correction is already implemented in P6 and remains conditional. Level 3 mel/spectral residual retrieval remains intentionally excluded by design.
 
@@ -54,12 +56,13 @@ python -m mosaic_svc.p14.prepare_dataset `
   --output D:\voice-lab\out\mosaic_svc\r16\dataset
 ```
 
-Train Student, Converter, AP, then NSF in the required frozen-stage order:
+Train Student, Converter, bounded Refiner, AP, then NSF in the required frozen-stage order. `-PrototypeBank` is optional; when present, the same bounded style correction is used for Converter and AP training:
 
 ```powershell
 .\scripts\mosaic_train_r16.ps1 `
   -DatasetDir D:\voice-lab\out\mosaic_svc\r16\dataset `
   -IdentityProfile D:\voice-lab\out\mosaic_svc\speaker_profiles\singing_identity.pt `
+  -PrototypeBank D:\voice-lab\out\mosaic_svc\p0\prototype_bank.pt `
   -OutputDir D:\voice-lab\out\mosaic_svc\r16\models
 ```
 
@@ -69,18 +72,31 @@ Render a file or launch the GUI:
 python -m mosaic_svc.p16.infer_file --input source.wav --output converted.wav `
   --student models\p13_student\content_student_best.pt `
   --converter models\p14_converter\streaming_converter_best.pt `
+  --refiner models\p14_refiner\acoustic_refiner_best.pt `
   --ap-head models\p15_ap\ap_head_best.pt `
   --nsf models\p15_nsf\streaming_nsf_best.pt `
-  --identity-profile singing_identity.pt --mode render
+  --identity-profile singing_identity.pt --prototype-bank prototype_bank.pt --mode render
 
 python -m mosaic_svc.p16.app --student <student.pt> --converter <converter.pt> `
-  --ap-head <ap.pt> --nsf <nsf.pt> --identity-profile <identity.pt>
+  --refiner <refiner.pt> --ap-head <ap.pt> --nsf <nsf.pt> `
+  --identity-profile <identity.pt> --prototype-bank <prototype.pt>
 ```
 
 Live microphone mode uses a worker queue so GPU inference never runs in the audio callback:
 
 ```powershell
 python -m mosaic_svc.p16.live_audio --student <student.pt> --converter <converter.pt> `
+  --refiner <refiner.pt> --ap-head <ap.pt> --nsf <nsf.pt> `
+  --identity-profile <identity.pt> --prototype-bank <prototype.pt> --mode live-quality
+```
+
+`live-fast` always bypasses the Refiner. `live-quality` and `render` use it only when `--refiner` is provided. Omitting both `--prototype-bank` and `--refiner` preserves the previous checkpoint behavior.
+
+Measure the actual end-to-end RTF instead of treating the mode latency budget as a result:
+
+```powershell
+python -m mosaic_svc.p16.benchmark --input source.wav --output benchmark.json `
+  --student <student.pt> --converter <converter.pt> --refiner <refiner.pt> `
   --ap-head <ap.pt> --nsf <nsf.pt> --identity-profile <identity.pt> --mode live-quality
 ```
 

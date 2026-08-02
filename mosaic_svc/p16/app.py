@@ -19,7 +19,18 @@ def build_app(args):
             raise gr.Error("Input audio is required.")
         if mode not in runtimes:
             runtimes[mode] = MosaicStreamingRuntime(
-                args.student, args.converter, args.ap_head, args.nsf, args.identity_profile, mode, args.device
+                student=args.student,
+                converter=args.converter,
+                ap_head=args.ap_head,
+                nsf=args.nsf,
+                identity_profile=args.identity_profile,
+                mode=mode,
+                device=args.device,
+                prototype_bank=args.prototype_bank,
+                prototype_strength=args.prototype_strength,
+                prototype_max_norm_ratio=args.prototype_max_norm_ratio,
+                prototype_max_gate=args.prototype_max_gate,
+                refiner=args.refiner,
             )
         waveform, sample_rate = librosa.load(audio_path, sr=None, mono=True)
         output, output_rate = runtimes[mode].convert_waveform(waveform, sample_rate)
@@ -44,6 +55,11 @@ def build_parser():
     parser.add_argument("--ap-head", required=True)
     parser.add_argument("--nsf", required=True)
     parser.add_argument("--identity-profile", required=True)
+    parser.add_argument("--prototype-bank")
+    parser.add_argument("--prototype-strength", type=float, default=1.0)
+    parser.add_argument("--prototype-max-norm-ratio", type=float, default=0.10)
+    parser.add_argument("--prototype-max-gate", type=float, default=0.25)
+    parser.add_argument("--refiner", help="Optional bounded P14 acoustic refiner")
     parser.add_argument("--device")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=7861)
