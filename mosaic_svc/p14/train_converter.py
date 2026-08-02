@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 from modules.commons import str2bool
 from mosaic_svc.r16.streaming_modules import CausalContentStudent, StreamingAcousticConverter, StreamingConfig
+from mosaic_svc.r16.style_conditioning import load_conditioned_style
 
 
 def _paths(manifest):
@@ -73,8 +74,14 @@ def run(args):
     config = StreamingConfig(hidden_dim=args.hidden_dim, layers=args.layers, kernel_size=args.kernel_size)
     model = StreamingAcousticConverter(config).to(device)
     student = _load_student(args.student, device)
-    profile = torch.load(args.identity_profile, map_location="cpu")
-    style = profile["centroid"].float().view(1, -1).to(device)
+    style = load_conditioned_style(
+        args.identity_profile,
+        device,
+        args.prototype_bank,
+        args.prototype_strength,
+        args.prototype_max_norm_ratio,
+        args.prototype_max_gate,
+    )
     train_paths, validation_paths = _paths(args.train_manifest), _paths(args.validation_manifest)
     if not train_paths or not validation_paths:
         raise ValueError("converter manifests require acoustic feature files")
@@ -130,6 +137,10 @@ def build_parser():
     parser.add_argument("--train-manifest", required=True)
     parser.add_argument("--validation-manifest", required=True)
     parser.add_argument("--identity-profile", required=True)
+    parser.add_argument("--prototype-bank")
+    parser.add_argument("--prototype-strength", type=float, default=1.0)
+    parser.add_argument("--prototype-max-norm-ratio", type=float, default=0.10)
+    parser.add_argument("--prototype-max-gate", type=float, default=0.25)
     parser.add_argument("--student", help="Frozen P13 student checkpoint; recommended to match runtime inputs")
     parser.add_argument("--output", required=True)
     parser.add_argument("--steps", type=int, default=3000)

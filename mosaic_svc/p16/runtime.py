@@ -8,10 +8,12 @@ import numpy as np
 import torch
 import torchaudio
 
+from mosaic_svc.p14.refiner import load_refiner
 from mosaic_svc.p14.prosody import extract_prosody
 from mosaic_svc.p15.ap_head import load_ap_head
 from mosaic_svc.p15.nsf import load_nsf
 from mosaic_svc.r16.streaming_modules import CausalContentStudent, StreamingAcousticConverter, StreamingConfig
+from mosaic_svc.r16.style_conditioning import load_conditioned_style
 
 
 @dataclass(frozen=True)
@@ -37,17 +39,38 @@ def _load_module(path, model_type, device):
 
 
 class MosaicStreamingRuntime:
-    def __init__(self, student, converter, ap_head, nsf, identity_profile, mode="live-fast", device=None):
+    def __init__(
+        self,
+        student,
+        converter,
+        ap_head,
+        nsf,
+        identity_profile,
+        mode="live-fast",
+        device=None,
+        prototype_bank=None,
+        prototype_strength=1.0,
+        prototype_max_norm_ratio=0.10,
+        prototype_max_gate=0.25,
+        refiner=None,
+    ):
         if mode not in MODES:
             raise ValueError(f"unknown mode {mode!r}; choose from {', '.join(MODES)}")
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.mode = MODES[mode]
         self.student = _load_module(student, CausalContentStudent, self.device)
         self.converter = _load_module(converter, StreamingAcousticConverter, self.device)
+        self.refiner = load_refiner(refiner, self.device).eval().requires_grad_(False) if refiner else None
         self.ap_head = load_ap_head(ap_head, self.device).eval().requires_grad_(False)
         self.nsf = load_nsf(nsf, self.device).eval().requires_grad_(False)
-        profile = torch.load(identity_profile, map_location="cpu")
-        self.style = profile["centroid"].float().view(1, -1).to(self.device)
+        self.style = load_conditioned_style(
+            identity_profile,
+            self.device,
+            prototype_bank,
+            prototype_strength,
+            prototype_max_norm_ratio,
+            prototype_max_gate,
+        )
         self.reset()
 
     def reset(self):
@@ -78,6 +101,8 @@ class MosaicStreamingRuntime:
         self.prosody_cache = converter_prosody[:, -converter_cache:].detach()
         latent = self.converter.encode(converter_content, converter_prosody, self.style)[:, -current:]
         mel = self.converter.mel(latent)
+        if self.mode.refinement and self.refiner is not None:
+            mel = self.refiner(latent, mel, prosody, self.style)
         ap = self.ap_head(latent, mel, prosody, self.style)
         waveform, self.phase = self.nsf(mel, prosody, ap, self.phase)
         if self.last_sample is not None:

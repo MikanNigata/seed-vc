@@ -16,7 +16,18 @@ def run(args):
     mode = MODES[args.mode]
     blocksize = mode.chunk_frames * 640
     runtime = MosaicStreamingRuntime(
-        args.student, args.converter, args.ap_head, args.nsf, args.identity_profile, args.mode, args.device
+        student=args.student,
+        converter=args.converter,
+        ap_head=args.ap_head,
+        nsf=args.nsf,
+        identity_profile=args.identity_profile,
+        mode=args.mode,
+        device=args.device,
+        prototype_bank=args.prototype_bank,
+        prototype_strength=args.prototype_strength,
+        prototype_max_norm_ratio=args.prototype_max_norm_ratio,
+        prototype_max_gate=args.prototype_max_gate,
+        refiner=args.refiner,
     )
     inputs: queue.Queue[np.ndarray] = queue.Queue(maxsize=8)
     outputs: queue.Queue[np.ndarray] = queue.Queue(maxsize=8)
@@ -84,6 +95,11 @@ def build_parser():
     parser.add_argument("--ap-head")
     parser.add_argument("--nsf")
     parser.add_argument("--identity-profile")
+    parser.add_argument("--prototype-bank")
+    parser.add_argument("--prototype-strength", type=float, default=1.0)
+    parser.add_argument("--prototype-max-norm-ratio", type=float, default=0.10)
+    parser.add_argument("--prototype-max-gate", type=float, default=0.25)
+    parser.add_argument("--refiner", help="Optional bounded P14 refiner; used only in live-quality mode")
     parser.add_argument("--mode", choices=("live-fast", "live-quality"), default="live-quality")
     parser.add_argument("--input-device")
     parser.add_argument("--output-device")

@@ -11,6 +11,7 @@ import torch
 from tqdm import tqdm
 
 from modules.commons import str2bool
+from mosaic_svc.p11.grl import SpeakerAdversarialProbe
 from mosaic_svc.p13.distillation import dynamic_chunk, student_distillation_loss
 from mosaic_svc.r16.streaming_modules import CausalContentStudent, StreamingConfig
 
@@ -30,14 +31,37 @@ def _load(path: str, device):
     return item["input_features"].float().to(device), item["teacher_features"].float().to(device)
 
 
+def _load_speaker_probe(path, device):
+    if not path:
+        return None
+    checkpoint = torch.load(path, map_location="cpu")
+    speakers = checkpoint.get("speakers")
+    if not speakers:
+        raise ValueError("speaker probe checkpoint has no speaker labels")
+    feature_dim = int(checkpoint["feature_dim"])
+    hidden_dim = int(checkpoint["state_dict"]["network.0.weight"].size(0))
+    probe = SpeakerAdversarialProbe(feature_dim, len(speakers), hidden_dim).to(device)
+    probe.load_state_dict(checkpoint["state_dict"])
+    return probe.eval().requires_grad_(False)
+
+
+def _speaker_logits(probe, features):
+    if probe is None:
+        return None
+    pooled = torch.cat([features.mean(1), features.std(1)], dim=-1)
+    return probe.network(pooled)
+
+
 @torch.no_grad()
-def _validate(model, paths, device):
+def _validate(model, paths, device, probe=None, leakage_weight=0.05):
     model.eval()
     values = []
     for path in paths:
         source, teacher = _load(path, device)
         student = model(source)
-        loss, _ = student_distillation_loss(student, teacher)
+        loss, _ = student_distillation_loss(
+            student, teacher, _speaker_logits(probe, student), leakage_weight
+        )
         values.append(float(loss.cpu()))
     model.train()
     return sum(values) / len(values)
@@ -54,6 +78,7 @@ def run(args: argparse.Namespace) -> Path:
         kernel_size=args.kernel_size,
     )
     model = CausalContentStudent(input_dim=80, config=config).to(device)
+    speaker_probe = _load_speaker_probe(args.speaker_probe, device)
     train_paths = _read_manifest(args.train_manifest)
     validation_paths = _read_manifest(args.validation_manifest)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -69,14 +94,21 @@ def run(args: argparse.Namespace) -> Path:
         optimizer.zero_grad(set_to_none=True)
         with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=args.fp16 and device.type == "cuda"):
             prediction = model(source)
-            loss, parts = student_distillation_loss(prediction, teacher)
+            loss, parts = student_distillation_loss(
+                prediction,
+                teacher,
+                _speaker_logits(speaker_probe, prediction),
+                args.speaker_leakage_weight,
+            )
         scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
         scaler.step(optimizer)
         scaler.update()
         if step % args.validate_every == 0 or step == args.steps:
-            validation = _validate(model, validation_paths, device)
+            validation = _validate(
+                model, validation_paths, device, speaker_probe, args.speaker_leakage_weight
+            )
             checkpoint = output_dir / f"content_student_step_{step:06d}.pt"
             torch.save({"config": config.__dict__, "state_dict": model.state_dict()}, checkpoint)
             improved = validation < best - args.min_delta
@@ -110,6 +142,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--train-manifest", required=True)
     parser.add_argument("--validation-manifest", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--speaker-probe", help="Frozen external multi-speaker P11 probe checkpoint")
+    parser.add_argument("--speaker-leakage-weight", type=float, default=0.05)
     parser.add_argument("--steps", type=int, default=2000)
     parser.add_argument("--content-dim", type=int, default=768)
     parser.add_argument("--hidden-dim", type=int, default=384)

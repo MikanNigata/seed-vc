@@ -10,6 +10,7 @@ from pathlib import Path
 import librosa
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from modules.commons import str2bool
 from mosaic_svc.p11.content_teacher import load_content_teacher
@@ -108,6 +109,47 @@ def _fit_probe(train_x, train_y, test_x, test_y, speakers, nonlinear, epochs, de
         return float((model(test_x).argmax(-1) == test_y).float().mean().cpu())
 
 
+def _verification_metrics(train_x, train_y, test_x, test_y, speakers):
+    train_x = F.normalize(train_x.float(), dim=-1)
+    test_x = F.normalize(test_x.float(), dim=-1)
+    centroids = torch.stack([F.normalize(train_x[train_y == index].mean(0), dim=0) for index in range(speakers)])
+    scores = test_x @ centroids.transpose(0, 1)
+    nearest_centroid = float((scores.argmax(-1) == test_y).float().mean())
+    genuine = scores.gather(1, test_y[:, None]).squeeze(1)
+    impostor_mask = torch.ones_like(scores, dtype=torch.bool)
+    impostor_mask.scatter_(1, test_y[:, None], False)
+    impostor = scores[impostor_mask]
+    thresholds = torch.unique(torch.cat([genuine, impostor])).sort().values
+    if thresholds.numel() > 2048:
+        indexes = torch.linspace(0, thresholds.numel() - 1, 2048).long()
+        thresholds = thresholds[indexes]
+    false_reject = (genuine[:, None] < thresholds[None, :]).float().mean(0)
+    false_accept = (impostor[:, None] >= thresholds[None, :]).float().mean(0)
+    best = torch.argmin((false_reject - false_accept).abs())
+    eer = float(((false_reject[best] + false_accept[best]) * 0.5).cpu())
+    return {
+        "nearest_centroid_accuracy": nearest_centroid,
+        "verification_eer": eer,
+        "genuine_cosine_mean": float(genuine.mean()),
+        "impostor_cosine_mean": float(impostor.mean()),
+    }
+
+
+def _retention_metrics(reference, candidate):
+    reference = F.normalize(reference.float(), dim=-1)
+    candidate = F.normalize(candidate.float(), dim=-1)
+    if reference.shape != candidate.shape:
+        return {"contentvec_cosine": None, "linear_cka": None}
+    cosine = float(F.cosine_similarity(reference, candidate, dim=-1).mean())
+    x = reference - reference.mean(0, keepdim=True)
+    y = candidate - candidate.mean(0, keepdim=True)
+    cross = torch.linalg.matrix_norm(x.transpose(0, 1) @ y).square()
+    norm_x = torch.linalg.matrix_norm(x.transpose(0, 1) @ x)
+    norm_y = torch.linalg.matrix_norm(y.transpose(0, 1) @ y)
+    cka = float((cross / (norm_x * norm_y).clamp_min(1e-8)).cpu())
+    return {"contentvec_cosine": cosine, "linear_cka": cka}
+
+
 def run(args: argparse.Namespace) -> Path:
     rows = _read_manifest(args.manifest)
     train_rows, test_rows = _split(rows, args.seed)
@@ -131,6 +173,8 @@ def run(args: argparse.Namespace) -> Path:
             "mlp_accuracy": _fit_probe(
                 train_stages[name], train_y, test_stages[name], test_y, len(labels), True, args.epochs, device
             ),
+            **_verification_metrics(train_stages[name], train_y, test_stages[name], test_y, len(labels)),
+            "retention": _retention_metrics(test_stages["contentvec"], test_stages[name]),
         }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

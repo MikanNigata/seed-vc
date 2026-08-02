@@ -12,7 +12,18 @@ from mosaic_svc.p16.runtime import MosaicStreamingRuntime
 def run(args):
     waveform, sample_rate = librosa.load(args.input, sr=None, mono=True)
     runtime = MosaicStreamingRuntime(
-        args.student, args.converter, args.ap_head, args.nsf, args.identity_profile, args.mode, args.device
+        student=args.student,
+        converter=args.converter,
+        ap_head=args.ap_head,
+        nsf=args.nsf,
+        identity_profile=args.identity_profile,
+        mode=args.mode,
+        device=args.device,
+        prototype_bank=args.prototype_bank,
+        prototype_strength=args.prototype_strength,
+        prototype_max_norm_ratio=args.prototype_max_norm_ratio,
+        prototype_max_gate=args.prototype_max_gate,
+        refiner=args.refiner,
     )
     output_audio, output_rate = runtime.convert_waveform(waveform, sample_rate)
     output = Path(args.output)
@@ -31,6 +42,11 @@ def build_parser():
     parser.add_argument("--ap-head", required=True)
     parser.add_argument("--nsf", required=True)
     parser.add_argument("--identity-profile", required=True)
+    parser.add_argument("--prototype-bank")
+    parser.add_argument("--prototype-strength", type=float, default=1.0)
+    parser.add_argument("--prototype-max-norm-ratio", type=float, default=0.10)
+    parser.add_argument("--prototype-max-gate", type=float, default=0.25)
+    parser.add_argument("--refiner", help="Optional bounded P14 refiner; used only in live-quality/render modes")
     parser.add_argument("--mode", choices=("live-fast", "live-quality", "render"), default="render")
     parser.add_argument("--device")
     return parser

@@ -16,7 +16,12 @@ def dynamic_chunk(x: torch.Tensor, target: torch.Tensor, min_frames: int = 2, ma
     return x[:, start : start + length], target[:, start : start + length]
 
 
-def student_distillation_loss(student: torch.Tensor, teacher: torch.Tensor) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+def student_distillation_loss(
+    student: torch.Tensor,
+    teacher: torch.Tensor,
+    speaker_logits: torch.Tensor | None = None,
+    speaker_leakage_weight: float = 0.05,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     frame = masked_l1(student, teacher)
     velocity = masked_l1(delta(student), delta(teacher)) if student.size(1) > 1 else frame.new_zeros(())
     acceleration = masked_l1(delta2(student), delta2(teacher)) if student.size(1) > 2 else frame.new_zeros(())
@@ -31,11 +36,16 @@ def student_distillation_loss(student: torch.Tensor, teacher: torch.Tensor) -> t
     else:
         vowel = frame.new_zeros(())
         boundary = frame.new_zeros(())
+    leakage = frame.new_zeros(())
+    if speaker_logits is not None:
+        leakage = -torch.log_softmax(speaker_logits.float(), dim=-1).mean()
     total = frame + 0.5 * velocity + 0.1 * acceleration + 0.6 * vowel + 0.4 * boundary
+    total = total + speaker_leakage_weight * leakage
     return total, {
         "frame": frame,
         "delta": velocity,
         "delta2": acceleration,
         "long_vowel": vowel,
         "boundary": boundary,
+        "speaker_leakage": leakage,
     }
