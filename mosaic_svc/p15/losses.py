@@ -11,7 +11,7 @@ def multi_resolution_stft_loss(prediction: torch.Tensor, target: torch.Tensor) -
         window = torch.hann_window(n_fft, device=prediction.device, dtype=prediction.dtype)
         pred = torch.stft(prediction, n_fft, hop, n_fft, window, return_complex=True).abs().clamp_min(1e-5)
         truth = torch.stft(target, n_fft, hop, n_fft, window, return_complex=True).abs().clamp_min(1e-5)
-        convergence = torch.linalg.vector_norm(pred - truth) / torch.linalg.vector_norm(truth).clamp_min(1e-6)
+        convergence = torch.linalg.vector_norm(pred - truth) / torch.linalg.vector_norm(truth).clamp_min(1.0)
         log_magnitude = (pred.log() - truth.log()).abs().mean()
         losses.append(convergence + log_magnitude)
     return torch.stack(losses).mean()
