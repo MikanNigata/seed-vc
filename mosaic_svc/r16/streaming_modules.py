@@ -22,14 +22,15 @@ class CausalConvBlock(nn.Module):
         super().__init__()
         self.pad = kernel_size - 1
         self.conv = nn.Conv1d(channels, channels, kernel_size)
-        self.norm = nn.GroupNorm(1, channels)
+        # Per-frame normalization preserves causality; GroupNorm would leak future frames.
+        self.norm = nn.LayerNorm(channels)
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = nn.functional.pad(x.transpose(1, 2), (self.pad, 0))
         y = self.conv(y)
-        y = self.norm(y)
-        y = nn.functional.silu(y).transpose(1, 2)
+        y = self.norm(y.transpose(1, 2))
+        y = nn.functional.silu(y)
         return x + self.dropout(y)
 
 
@@ -87,12 +88,16 @@ class StreamingAcousticConverter(nn.Module):
         self.mel = nn.Linear(self.config.hidden_dim, self.config.mel_dim)
         self.ap = nn.Linear(self.config.hidden_dim, self.config.ap_bands + 2)
 
-    def forward(self, content: torch.Tensor, prosody: torch.Tensor, style: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def encode(self, content: torch.Tensor, prosody: torch.Tensor, style: torch.Tensor) -> torch.Tensor:
         style_t = style[:, None, :].expand(-1, content.size(1), -1)
         x = torch.cat([content, prosody, style_t], dim=-1)
         x = self.in_proj(x)
         for block in self.blocks:
             x = block(x)
+        return x
+
+    def forward(self, content: torch.Tensor, prosody: torch.Tensor, style: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        x = self.encode(content, prosody, style)
         return self.mel(x), self.ap(x)
 
 
