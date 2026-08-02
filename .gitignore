@@ -4,6 +4,7 @@ build/
 build_contrib/
 dist/
 .cache/
+.venv/
 *.egg-info/
 *.egg
 *.py[cod]

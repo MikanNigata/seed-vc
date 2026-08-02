@@ -15,19 +15,74 @@ This fork keeps upstream Seed-VC intact and adds Mosaic-SVC as an extension pack
 - M4 dialogue CAMPPlus speaker profile extraction and high-quality prompt reranking.
 - R1.6 data audit and admission CSV generation.
 - R1.6 minimal F0/LUFS-proxy evaluation.
-- R1.6 streaming module interfaces for Content Student, L1 Prototype Memory, Acoustic Converter, and NSF vocoder stub.
-- R1.6 distillation losses for frame, delta, delta2, and phoneme preservation.
+- P11 ContentVec + Whisper gated teacher fusion and bounded De-Timbre Adapter.
+- P11 timbre-perturbation training and warmup GRL pretraining for external multi-speaker data.
+- P12 path-by-path linear/MLP speaker leakage probes.
+- P13 causal Content Student with dynamic chunks and multi-loss distillation.
+- P14 explicit F0/UV/confidence/slope/energy/phonation bus and causal acoustic converter.
+- P15 causal target AP Head and trainable harmonic-noise NSF vocoder with persistent phase.
+- P16 file renderer, Gradio GUI, and queued live microphone runtime.
+- One-pass dataset preparation and sequential R1.6 training scripts.
 
-## Not Implemented As Production Models Yet
+## Implementation Versus Checkpoints
 
-- Full ContentVec + Whisper teacher fusion.
-- De-Timbre Adapter pretraining.
-- External multi-speaker GRL probe.
-- Fully trained Streaming Student.
-- Production harmonic-noise NSF vocoder.
-- Level 2 mid-block K/V correction.
+The R1.6 module and training paths are implemented. Production P13-P16 checkpoints have not yet been trained on the complete approved singing dataset. The included smoke checkpoints use synthetic data and only prove execution, serialization, CUDA gradients, and runtime wiring; they are not listenable models.
 
-Those parts now have explicit module boundaries and training contracts, but they still need datasets and training runs.
+Level 2 K/V correction is already implemented in P6 and remains conditional. Level 3 mel/spectral residual retrieval remains intentionally excluded by design.
+
+## R1.6 End-to-End
+
+Prepare a CSV with `path,split,session`. Every row must explicitly use `train`, `validation`, or `test`; split by song/session, not neighboring segments.
+
+Train P11 on approved target singing:
+
+```powershell
+python -m mosaic_svc.p11.train_detimbre `
+  --train-manifest train_audio.csv `
+  --validation-manifest validation_audio.csv `
+  --contentvec D:\voice-lab\models\contentvec-hf `
+  --output D:\voice-lab\out\mosaic_svc\r16\p11
+```
+
+Prepare all P13-P15 features in one encoder pass per clip:
+
+```powershell
+python -m mosaic_svc.p14.prepare_dataset `
+  --manifest dataset_split.csv `
+  --teacher D:\voice-lab\out\mosaic_svc\r16\p11\content_teacher_best.pt `
+  --contentvec D:\voice-lab\models\contentvec-hf `
+  --output D:\voice-lab\out\mosaic_svc\r16\dataset
+```
+
+Train Student, Converter, AP, then NSF in the required frozen-stage order:
+
+```powershell
+.\scripts\mosaic_train_r16.ps1 `
+  -DatasetDir D:\voice-lab\out\mosaic_svc\r16\dataset `
+  -IdentityProfile D:\voice-lab\out\mosaic_svc\speaker_profiles\singing_identity.pt `
+  -OutputDir D:\voice-lab\out\mosaic_svc\r16\models
+```
+
+Render a file or launch the GUI:
+
+```powershell
+python -m mosaic_svc.p16.infer_file --input source.wav --output converted.wav `
+  --student models\p13_student\content_student_best.pt `
+  --converter models\p14_converter\streaming_converter_best.pt `
+  --ap-head models\p15_ap\ap_head_best.pt `
+  --nsf models\p15_nsf\streaming_nsf_best.pt `
+  --identity-profile singing_identity.pt --mode render
+
+python -m mosaic_svc.p16.app --student <student.pt> --converter <converter.pt> `
+  --ap-head <ap.pt> --nsf <nsf.pt> --identity-profile <identity.pt>
+```
+
+Live microphone mode uses a worker queue so GPU inference never runs in the audio callback:
+
+```powershell
+python -m mosaic_svc.p16.live_audio --student <student.pt> --converter <converter.pt> `
+  --ap-head <ap.pt> --nsf <nsf.pt> --identity-profile <identity.pt> --mode live-quality
+```
 
 ## M1-M4 Current Result
 

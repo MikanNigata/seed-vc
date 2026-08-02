@@ -18,6 +18,7 @@ def masked_l1(pred: torch.Tensor, target: torch.Tensor, mask: torch.Tensor | Non
         return loss.mean()
     while mask.ndim < loss.ndim:
         mask = mask.unsqueeze(-1)
+    mask = mask.expand_as(loss)
     return (loss * mask).sum() / mask.sum().clamp_min(1.0)
 
 
