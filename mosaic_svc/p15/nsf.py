@@ -43,8 +43,13 @@ class HarmonicNoiseSource(nn.Module):
         noise_ratio = nn.functional.interpolate(
             noise_ratio[:, None], scale_factor=self.config.hop_length, mode="linear", align_corners=False
         )[:, 0]
-        noise = torch.randn_like(harmonic) * noise_ratio.clamp(0.0, 1.0)
-        source = harmonic * (1.0 - noise_ratio.clamp(0.0, 1.0)) + noise
+        # Spectral flatness overestimates AP in high-frequency voiced bands. Keep
+        # the excitation harmonic-dominant while retaining noise for unvoiced frames.
+        voiced_noise = noise_ratio.clamp(0.0, 1.0) * 0.15
+        unvoiced_noise = noise_ratio.clamp(0.5, 1.0)
+        excitation_noise = torch.where(voiced_samples > 0.5, voiced_noise, unvoiced_noise)
+        noise = torch.randn_like(harmonic) * excitation_noise
+        source = harmonic * (1.0 - excitation_noise) + noise
         return source[:, None], torch.remainder(accumulated[:, -1], 2.0 * torch.pi)
 
 

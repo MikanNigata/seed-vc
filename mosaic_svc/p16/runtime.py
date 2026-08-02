@@ -111,4 +111,8 @@ class MosaicStreamingRuntime:
     @torch.inference_mode()
     def convert_waveform(self, waveform, sample_rate):
         self.reset()
-        return self.process_audio_chunk(waveform, sample_rate)
+        output, output_rate = self.process_audio_chunk(waveform, sample_rate)
+        peak = float(np.max(np.abs(output))) if output.size else 0.0
+        if peak > 0.98:
+            output = output * (0.98 / peak)
+        return output, output_rate
