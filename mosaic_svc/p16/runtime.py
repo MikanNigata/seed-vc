@@ -12,6 +12,7 @@ from mosaic_svc.p14.refiner import load_refiner
 from mosaic_svc.p14.prosody import extract_prosody
 from mosaic_svc.p15.ap_head import load_ap_head
 from mosaic_svc.p15.nsf import load_nsf
+from mosaic_svc.retired import reject_r16
 from mosaic_svc.r16.streaming_modules import CausalContentStudent, StreamingAcousticConverter, StreamingConfig
 from mosaic_svc.r16.style_conditioning import load_conditioned_style
 
@@ -54,6 +55,7 @@ class MosaicStreamingRuntime:
         prototype_max_gate=0.25,
         refiner=None,
     ):
+        reject_r16()
         if mode not in MODES:
             raise ValueError(f"unknown mode {mode!r}; choose from {', '.join(MODES)}")
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))

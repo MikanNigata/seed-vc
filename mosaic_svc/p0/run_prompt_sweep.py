@@ -93,7 +93,7 @@ def run(args: argparse.Namespace) -> Path:
         [
             python,
             "-m",
-            "mosaic_svc.r16.eval_audio",
+            "mosaic_svc.p0.eval_audio",
             "--reference",
             args.source,
             "--candidates",

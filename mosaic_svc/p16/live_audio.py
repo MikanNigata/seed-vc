@@ -9,9 +9,11 @@ import numpy as np
 import sounddevice as sd
 
 from mosaic_svc.p16.runtime import MODES, MosaicStreamingRuntime
+from mosaic_svc.retired import reject_r16
 
 
 def run(args):
+    reject_r16()
     sample_rate = 32000
     mode = MODES[args.mode]
     blocksize = mode.chunk_frames * 640

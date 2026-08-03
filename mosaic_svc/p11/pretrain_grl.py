@@ -11,6 +11,7 @@ import torch
 from tqdm import tqdm
 
 from modules.commons import str2bool
+from mosaic_svc.retired import reject_r16
 from mosaic_svc.p11.content_teacher import load_content_teacher, save_content_teacher
 from mosaic_svc.p11.encoders import FrozenTeacherEncoders
 from mosaic_svc.p11.grl import SpeakerAdversarialProbe, grl_strength
@@ -39,6 +40,7 @@ def _crop(path, seconds):
 
 
 def run(args):
+    reject_r16()
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

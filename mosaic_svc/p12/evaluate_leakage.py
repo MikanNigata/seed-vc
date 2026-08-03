@@ -13,6 +13,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from modules.commons import str2bool
+from mosaic_svc.retired import reject_r16
 from mosaic_svc.p11.content_teacher import load_content_teacher
 from mosaic_svc.p11.encoders import FrozenTeacherEncoders
 
@@ -151,6 +152,7 @@ def _retention_metrics(reference, candidate):
 
 
 def run(args: argparse.Namespace) -> Path:
+    reject_r16()
     rows = _read_manifest(args.manifest)
     train_rows, test_rows = _split(rows, args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

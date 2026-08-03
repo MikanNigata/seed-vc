@@ -16,6 +16,7 @@ from mosaic_svc.p15.nsf import NSFConfig, StreamingHarmonicNoiseNSF
 from mosaic_svc.r16.losses import masked_l1
 from mosaic_svc.r16.streaming_modules import CausalContentStudent, StreamingAcousticConverter, StreamingConfig
 from mosaic_svc.r16.style_conditioning import load_conditioned_style
+from mosaic_svc.retired import RetiredPipelineError
 from mosaic_svc.p0.prototype_bank import PrototypeBank, PrototypeMeta
 
 
@@ -148,3 +149,14 @@ def test_nsf_output_length_and_phase_state():
     assert audio.shape == continued.shape == (1, 1, 80)
     assert phase.shape == next_phase.shape == (1,)
     assert torch.isfinite(audio).all() and torch.isfinite(next_phase).all()
+
+
+def test_r16_runtime_is_retired_before_loading_checkpoints():
+    from mosaic_svc.p16.runtime import MosaicStreamingRuntime
+
+    try:
+        MosaicStreamingRuntime(None, None, None, None, None)
+    except RetiredPipelineError as error:
+        assert "retired" in str(error)
+    else:
+        raise AssertionError("R16 runtime must reject execution")

@@ -5,6 +5,8 @@ from pathlib import Path
 
 import librosa
 import torch
+
+from mosaic_svc.retired import reject_r16
 import torchaudio
 
 from modules.commons import str2bool
@@ -14,6 +16,7 @@ from mosaic_svc.p11.encoders import FrozenTeacherEncoders
 
 @torch.no_grad()
 def run(args: argparse.Namespace) -> Path:
+    reject_r16()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     encoders = FrozenTeacherEncoders(args.contentvec, args.whisper, device=device, fp16=args.fp16)
     teacher = load_content_teacher(args.teacher, device).eval()

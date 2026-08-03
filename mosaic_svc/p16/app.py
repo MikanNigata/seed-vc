@@ -9,9 +9,11 @@ import librosa
 import soundfile as sf
 
 from mosaic_svc.p16.runtime import MosaicStreamingRuntime
+from mosaic_svc.retired import reject_r16
 
 
 def build_app(args):
+    reject_r16()
     runtimes = {}
 
     def convert(audio_path, mode):

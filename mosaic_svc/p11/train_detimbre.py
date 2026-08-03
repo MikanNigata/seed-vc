@@ -12,6 +12,7 @@ import torch
 from tqdm import tqdm
 
 from modules.commons import str2bool
+from mosaic_svc.retired import reject_r16
 from mosaic_svc.p11.content_teacher import ContentTeacher, ContentTeacherConfig, save_content_teacher
 from mosaic_svc.p11.encoders import FrozenTeacherEncoders
 from mosaic_svc.p11.losses import detimbre_loss
@@ -67,6 +68,7 @@ def _validate(args, encoders, teacher, paths, device) -> dict[str, float]:
 
 
 def run(args: argparse.Namespace) -> Path:
+    reject_r16()
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
