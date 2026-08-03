@@ -10,9 +10,11 @@ import librosa
 import torch
 
 from mosaic_svc.p16.runtime import MosaicStreamingRuntime
+from mosaic_svc.retired import reject_r16
 
 
 def run(args):
+    reject_r16()
     waveform, sample_rate = librosa.load(args.input, sr=None, mono=True, duration=args.max_seconds)
     duration = len(waveform) / sample_rate
     if duration <= 0:

@@ -11,6 +11,7 @@ import torch
 from tqdm import tqdm
 
 from modules.commons import str2bool
+from mosaic_svc.retired import reject_r16
 from mosaic_svc.r16.streaming_modules import CausalContentStudent, StreamingAcousticConverter, StreamingConfig
 from mosaic_svc.r16.style_conditioning import load_conditioned_style
 
@@ -68,6 +69,7 @@ def _validate(model, paths, style, device, frames, student):
 
 
 def run(args):
+    reject_r16()
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

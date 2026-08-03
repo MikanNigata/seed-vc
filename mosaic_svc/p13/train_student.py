@@ -11,6 +11,7 @@ import torch
 from tqdm import tqdm
 
 from modules.commons import str2bool
+from mosaic_svc.retired import reject_r16
 from mosaic_svc.p11.grl import SpeakerAdversarialProbe
 from mosaic_svc.p13.distillation import dynamic_chunk, student_distillation_loss
 from mosaic_svc.r16.streaming_modules import CausalContentStudent, StreamingConfig
@@ -68,6 +69,7 @@ def _validate(model, paths, device, probe=None, leakage_weight=0.05):
 
 
 def run(args: argparse.Namespace) -> Path:
+    reject_r16()
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

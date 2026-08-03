@@ -1,6 +1,10 @@
-# Mosaic-SVC R1.6 Implementation Notes
+# Mosaic-SVC Seed-Only Extension Notes
 
 This fork keeps upstream Seed-VC intact and adds Mosaic-SVC as an extension package.
+
+## Active Scope
+
+Only the frozen Seed-VC P0-P10 path is active. HQ-SVC is not part of this repository, and Mosaic-SVC R1.6 P11-P16, Streaming Student, AP Head, NSF, Refiner, live runtime, and GUI were retired after unacceptable subjective audio quality. Their historical source remains for reproducibility, but every training and inference entrypoint rejects execution.
 
 ## Implemented
 
@@ -13,92 +17,7 @@ This fork keeps upstream Seed-VC intact and adds Mosaic-SVC as an extension pack
 - M2 Prompt Adapter, installed by wrapping `cond_x_merge_linear` with a prompt mel/condition/style residual branch.
 - M3 Prompt Adapter training over frozen Seed-VC using high-quality singing clips only.
 - M4 dialogue CAMPPlus speaker profile extraction and high-quality prompt reranking.
-- R1.6 data audit and admission CSV generation.
-- R1.6 minimal F0/LUFS-proxy evaluation.
-- P11 ContentVec + Whisper gated teacher fusion and bounded De-Timbre Adapter.
-- P11 timbre-perturbation training and warmup GRL pretraining for external multi-speaker data.
-- P12 path-by-path linear/MLP probes, centroid verification EER, and ContentVec retention metrics.
-- P13 causal Content Student with dynamic chunks, multi-loss distillation, and optional frozen-probe leakage suppression.
-- P14 explicit F0/UV/confidence/slope/energy/phonation bus, causal acoustic converter, and optional bounded residual refiner.
-- P15 causal target AP Head and trainable harmonic-noise NSF vocoder with persistent phase.
-- P16 file renderer, Gradio GUI, and queued live microphone runtime.
-- P16 end-to-end RTF, elapsed-time, and peak-VRAM benchmark reporting.
-- Shared bounded L1 Prototype Memory conditioning across P14, P15, and P16.
-- One-pass dataset preparation and sequential R1.6 training scripts.
-
-## Implementation Versus Checkpoints
-
-The R1.6 module and training paths are implemented. A first real-data P11-P16 run was trained on about 52 seconds of approved singing, with 24-second validation and test partitions. Although it produced voiced output and strong F0 metrics on unseen songs, listening quality was unacceptable. The checkpoint is a documented No-Go and must not replace the P10 Seed-VC default. The Prototype and Refiner paths added after that result are disabled unless their checkpoints are explicitly supplied; implementation does not imply a quality pass. Synthetic smoke checkpoints only prove execution and are not listenable models.
-
-Level 2 K/V correction is already implemented in P6 and remains conditional. Level 3 mel/spectral residual retrieval remains intentionally excluded by design.
-
-## R1.6 End-to-End
-
-Prepare a CSV with `path,split,session`. Every row must explicitly use `train`, `validation`, or `test`; split by song/session, not neighboring segments.
-
-Train P11 on approved target singing:
-
-```powershell
-python -m mosaic_svc.p11.train_detimbre `
-  --train-manifest train_audio.csv `
-  --validation-manifest validation_audio.csv `
-  --contentvec D:\voice-lab\models\contentvec-hf `
-  --output D:\voice-lab\out\mosaic_svc\r16\p11
-```
-
-Prepare all P13-P15 features in one encoder pass per clip:
-
-```powershell
-python -m mosaic_svc.p14.prepare_dataset `
-  --manifest dataset_split.csv `
-  --teacher D:\voice-lab\out\mosaic_svc\r16\p11\content_teacher_best.pt `
-  --contentvec D:\voice-lab\models\contentvec-hf `
-  --output D:\voice-lab\out\mosaic_svc\r16\dataset
-```
-
-Train Student, Converter, bounded Refiner, AP, then NSF in the required frozen-stage order. `-PrototypeBank` is optional; when present, the same bounded style correction is used for Converter and AP training:
-
-```powershell
-.\scripts\mosaic_train_r16.ps1 `
-  -DatasetDir D:\voice-lab\out\mosaic_svc\r16\dataset `
-  -IdentityProfile D:\voice-lab\out\mosaic_svc\speaker_profiles\singing_identity.pt `
-  -PrototypeBank D:\voice-lab\out\mosaic_svc\p0\prototype_bank.pt `
-  -OutputDir D:\voice-lab\out\mosaic_svc\r16\models
-```
-
-Render a file or launch the GUI:
-
-```powershell
-python -m mosaic_svc.p16.infer_file --input source.wav --output converted.wav `
-  --student models\p13_student\content_student_best.pt `
-  --converter models\p14_converter\streaming_converter_best.pt `
-  --refiner models\p14_refiner\acoustic_refiner_best.pt `
-  --ap-head models\p15_ap\ap_head_best.pt `
-  --nsf models\p15_nsf\streaming_nsf_best.pt `
-  --identity-profile singing_identity.pt --prototype-bank prototype_bank.pt --mode render
-
-python -m mosaic_svc.p16.app --student <student.pt> --converter <converter.pt> `
-  --refiner <refiner.pt> --ap-head <ap.pt> --nsf <nsf.pt> `
-  --identity-profile <identity.pt> --prototype-bank <prototype.pt>
-```
-
-Live microphone mode uses a worker queue so GPU inference never runs in the audio callback:
-
-```powershell
-python -m mosaic_svc.p16.live_audio --student <student.pt> --converter <converter.pt> `
-  --refiner <refiner.pt> --ap-head <ap.pt> --nsf <nsf.pt> `
-  --identity-profile <identity.pt> --prototype-bank <prototype.pt> --mode live-quality
-```
-
-`live-fast` always bypasses the Refiner. `live-quality` and `render` use it only when `--refiner` is provided. Omitting both `--prototype-bank` and `--refiner` preserves the previous checkpoint behavior.
-
-Measure the actual end-to-end RTF instead of treating the mode latency budget as a result:
-
-```powershell
-python -m mosaic_svc.p16.benchmark --input source.wav --output benchmark.json `
-  --student <student.pt> --converter <converter.pt> --refiner <refiner.pt> `
-  --ap-head <ap.pt> --nsf <nsf.pt> --identity-profile <identity.pt> --mode live-quality
-```
+P10 is the current default. Do not resume or extend the retired R1.6 path.
 
 ## M1-M4 Current Result
 
@@ -185,7 +104,7 @@ Current decision after this check: prioritize high-quality prompt mel/semantic s
 Audit target clips:
 
 ```powershell
-D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.r16.data_audit `
+D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.data_audit `
   --input D:\voice-lab\data\target_clean `
   --output D:\voice-lab\out\mosaic_svc\audit\target_clean.csv
 ```

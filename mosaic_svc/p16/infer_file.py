@@ -7,9 +7,11 @@ import librosa
 import soundfile as sf
 
 from mosaic_svc.p16.runtime import MosaicStreamingRuntime
+from mosaic_svc.retired import reject_r16
 
 
 def run(args):
+    reject_r16()
     waveform, sample_rate = librosa.load(args.input, sr=None, mono=True)
     runtime = MosaicStreamingRuntime(
         student=args.student,

@@ -11,6 +11,7 @@ import torch
 from tqdm import tqdm
 
 from modules.commons import str2bool
+from mosaic_svc.retired import reject_r16
 from mosaic_svc.p15.losses import nsf_loss
 from mosaic_svc.p15.nsf import NSFConfig, StreamingHarmonicNoiseNSF, save_nsf
 
@@ -45,6 +46,7 @@ def _validate(model, paths, device, frames):
 
 
 def run(args):
+    reject_r16()
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

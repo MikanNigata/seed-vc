@@ -11,6 +11,7 @@ import torch
 from tqdm import tqdm
 
 from modules.commons import str2bool
+from mosaic_svc.retired import reject_r16
 from mosaic_svc.p14.refiner import load_refiner
 from mosaic_svc.p15.ap_head import APHeadConfig, TargetAPHead
 from mosaic_svc.r16.streaming_modules import StreamingAcousticConverter, StreamingConfig
@@ -71,6 +72,7 @@ def _validate(converter, head, paths, style, device, frames, refiner=None):
 
 
 def run(args):
+    reject_r16()
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

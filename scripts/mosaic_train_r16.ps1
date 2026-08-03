@@ -10,6 +10,8 @@ param(
     [int]$NsfSteps = 4000
 )
 
+throw "Mosaic-SVC R1.6/P11-P16 is retired after a subjective No-Go result. Use the Seed-VC P0-P10 path."
+
 $ErrorActionPreference = "Stop"
 $Python = Join-Path $PSScriptRoot "..\.venv\Scripts\python.exe"
 if (-not (Test-Path $Python)) { throw "Python venv not found: $Python" }

@@ -6,10 +6,13 @@ from pathlib import Path
 import librosa
 import torch
 
+from mosaic_svc.retired import reject_r16
+
 from mosaic_svc.p14.prosody import aperiodicity_targets, extract_prosody, mel_spectrogram
 
 
 def run(args: argparse.Namespace) -> Path:
+    reject_r16()
     item = torch.load(args.input, map_location="cpu")
     waveform, _ = librosa.load(item["source"], sr=args.sample_rate, mono=True)
     prosody = extract_prosody(waveform, args.sample_rate, args.hop_length)

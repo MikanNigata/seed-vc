@@ -10,6 +10,7 @@ import torchaudio
 from tqdm import tqdm
 
 from modules.commons import str2bool
+from mosaic_svc.retired import reject_r16
 from mosaic_svc.p11.content_teacher import load_content_teacher
 from mosaic_svc.p11.encoders import FrozenTeacherEncoders
 from mosaic_svc.p14.prosody import aperiodicity_targets, extract_prosody, mel_spectrogram
@@ -38,6 +39,7 @@ def _teacher_features(audio16, encoders, teacher, device, chunk_seconds):
 
 
 def run(args):
+    reject_r16()
     rows = _rows(args.manifest)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     encoders = FrozenTeacherEncoders(args.contentvec, args.whisper, device=device, fp16=args.fp16)
