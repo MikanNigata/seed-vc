@@ -14,6 +14,7 @@ import inference as seed_inference
 from modules.commons import str2bool
 from mosaic_svc.p0.audio_features import extract_campplus_style, load_audio_tensor
 from mosaic_svc.p0.f0_embedding_adapter import install_f0_embedding_adapter
+from mosaic_svc.p0.f0_condition_adapter import load_f0_condition_adapter
 from mosaic_svc.p0.prompt_adapter import PromptAdapterConfig, install_prompt_adapter
 from mosaic_svc.p0.prototype_bank import PrototypeBank
 from mosaic_svc.p0.style_adapter import StyleAdapterConfig, install_style_slice_adapter
@@ -104,6 +105,15 @@ def run(args: argparse.Namespace) -> Path:
     model, semantic_fn, f0_fn, vocoder_fn, campplus_model, mel_fn, mel_fn_args = seed_inference.load_models(args)
     sr = mel_fn_args["sampling_rate"]
     device = seed_inference.device
+
+    f0_condition_adapter = None
+    if args.f0_condition_adapter:
+        f0_condition_adapter = load_f0_condition_adapter(
+            args.f0_condition_adapter,
+            device,
+            trainable=False,
+            strength=args.f0_condition_adapter_strength,
+        )
 
     if args.f0_embedding_adapter:
         install_f0_embedding_adapter(
@@ -255,6 +265,8 @@ def run(args: argparse.Namespace) -> Path:
             f0=None,
         )
         cond = amplify_f0_condition(cond, cond_without_f0, args.f0_guidance_scale)
+    if f0_condition_adapter is not None:
+        cond = f0_condition_adapter(cond, shifted_f0_alt)
     prompt_condition, *_ = model.length_regulator(S_ori, ylens=target2_lengths, n_quantizers=3, f0=F0_ori)
 
     temporal_merge = None
@@ -368,6 +380,9 @@ def run(args: argparse.Namespace) -> Path:
     if args.f0_embedding_adapter:
         strength_label = f"{args.f0_embedding_adapter_strength:g}".replace(".", "p")
         mode = f"{mode}_f0a{strength_label}"
+    if f0_condition_adapter is not None:
+        strength_label = f"{args.f0_condition_adapter_strength:g}".replace(".", "p")
+        mode = f"{mode}_f0c{strength_label}"
     if args.f0_guidance_scale != 1.0:
         scale_label = f"{args.f0_guidance_scale:.2f}".replace(".", "p")
         mode = f"{mode}_f0g{scale_label}"
@@ -396,6 +411,8 @@ def run(args: argparse.Namespace) -> Path:
     print(f"Auto F0 shift semitones: {auto_f0_shift_semitones:.4f}")
     print(f"F0 embedding adapter: {args.f0_embedding_adapter or 'none'}")
     print(f"F0 embedding adapter strength: {args.f0_embedding_adapter_strength:g}")
+    print(f"F0 condition adapter: {args.f0_condition_adapter or 'none'}")
+    print(f"F0 condition adapter strength: {args.f0_condition_adapter_strength:g}")
     return out_path
 
 
@@ -419,6 +436,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--f0-embedding-adapter", default=None)
     parser.add_argument("--f0-embedding-adapter-strength", type=float, default=1.0)
+    parser.add_argument("--f0-condition-adapter", default=None)
+    parser.add_argument("--f0-condition-adapter-strength", type=float, default=1.0)
     parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--fp16", type=str2bool, default=True)
