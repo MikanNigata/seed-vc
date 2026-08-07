@@ -15,6 +15,7 @@ from modules.commons import str2bool
 from mosaic_svc.p0.audio_features import extract_campplus_style, load_audio_tensor
 from mosaic_svc.p0.f0_embedding_adapter import install_f0_embedding_adapter
 from mosaic_svc.p0.f0_condition_adapter import load_f0_condition_adapter
+from mosaic_svc.p0.f0_dit_adapter import install_f0_dit_adapter
 from mosaic_svc.p0.prompt_adapter import PromptAdapterConfig, install_prompt_adapter
 from mosaic_svc.p0.prototype_bank import PrototypeBank
 from mosaic_svc.p0.style_adapter import StyleAdapterConfig, install_style_slice_adapter
@@ -113,6 +114,16 @@ def run(args: argparse.Namespace) -> Path:
             device,
             trainable=False,
             strength=args.f0_condition_adapter_strength,
+        )
+
+    f0_dit_adapter = None
+    f0_dit_merge = None
+    if args.f0_dit_adapter:
+        f0_dit_adapter, f0_dit_merge = install_f0_dit_adapter(
+            model,
+            state_path=args.f0_dit_adapter,
+            trainable=False,
+            strength=args.f0_dit_adapter_strength,
         )
 
     if args.f0_embedding_adapter:
@@ -269,6 +280,12 @@ def run(args: argparse.Namespace) -> Path:
         cond = f0_condition_adapter(cond, shifted_f0_alt)
     prompt_condition, *_ = model.length_regulator(S_ori, ylens=target2_lengths, n_quantizers=3, f0=F0_ori)
 
+    f0_dit_schedule = None
+    if f0_dit_adapter is not None:
+        if not f0_condition:
+            raise ValueError("--f0-dit-adapter requires --f0-condition True")
+        f0_dit_schedule = f0_dit_adapter.schedule(shifted_f0_alt, cond.size(1))
+
     temporal_merge = None
     temporal_schedule = None
     temporal_summary = None
@@ -315,6 +332,16 @@ def run(args: argparse.Namespace) -> Path:
         chunk_cond = cond[:, processed_frames : processed_frames + max_source_window]
         is_last_chunk = processed_frames + max_source_window >= cond.size(1)
         cat_condition = torch.cat([prompt_condition, chunk_cond], dim=1)
+        if f0_dit_merge is not None:
+            chunk_f0 = f0_dit_schedule[:, processed_frames : processed_frames + chunk_cond.size(1)]
+            prompt_f0 = torch.zeros(
+                chunk_f0.size(0),
+                prompt_condition.size(1),
+                chunk_f0.size(2),
+                device=chunk_f0.device,
+                dtype=chunk_f0.dtype,
+            )
+            f0_dit_merge.set_schedule(torch.cat([prompt_f0, chunk_f0], dim=1))
         if temporal_merge is not None:
             chunk_style = temporal_schedule[:, processed_frames : processed_frames + chunk_cond.size(1)]
             prompt_style = style2[:, None, :].expand(-1, prompt_condition.size(1), -1)
@@ -355,6 +382,8 @@ def run(args: argparse.Namespace) -> Path:
 
     if temporal_merge is not None:
         temporal_merge.set_schedule(None)
+    if f0_dit_merge is not None:
+        f0_dit_merge.set_schedule(None)
 
     output_audio = torch.from_numpy(np.concatenate(generated_wave_chunks)).float().unsqueeze(0)
     out_dir = Path(args.output)
@@ -383,6 +412,9 @@ def run(args: argparse.Namespace) -> Path:
     if f0_condition_adapter is not None:
         strength_label = f"{args.f0_condition_adapter_strength:g}".replace(".", "p")
         mode = f"{mode}_f0c{strength_label}"
+    if f0_dit_adapter is not None:
+        strength_label = f"{args.f0_dit_adapter_strength:g}".replace(".", "p")
+        mode = f"{mode}_f0d{strength_label}"
     if args.f0_guidance_scale != 1.0:
         scale_label = f"{args.f0_guidance_scale:.2f}".replace(".", "p")
         mode = f"{mode}_f0g{scale_label}"
@@ -413,6 +445,8 @@ def run(args: argparse.Namespace) -> Path:
     print(f"F0 embedding adapter strength: {args.f0_embedding_adapter_strength:g}")
     print(f"F0 condition adapter: {args.f0_condition_adapter or 'none'}")
     print(f"F0 condition adapter strength: {args.f0_condition_adapter_strength:g}")
+    print(f"F0 DiT adapter: {args.f0_dit_adapter or 'none'}")
+    print(f"F0 DiT adapter strength: {args.f0_dit_adapter_strength:g}")
     return out_path
 
 
@@ -438,6 +472,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--f0-embedding-adapter-strength", type=float, default=1.0)
     parser.add_argument("--f0-condition-adapter", default=None)
     parser.add_argument("--f0-condition-adapter-strength", type=float, default=1.0)
+    parser.add_argument("--f0-dit-adapter", default=None)
+    parser.add_argument("--f0-dit-adapter-strength", type=float, default=1.0)
     parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--fp16", type=str2bool, default=True)
