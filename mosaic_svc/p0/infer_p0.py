@@ -25,6 +25,7 @@ from mosaic_svc.temporal.style_schedule import (
     load_temporal_memory_records,
     save_temporal_style_summary,
 )
+from mosaic_svc.f0_guidance import amplify_f0_condition
 
 
 def _seed_all(seed: int) -> None:
@@ -226,6 +227,16 @@ def run(args: argparse.Namespace) -> Path:
         shifted_f0_alt = None
 
     cond, *_ = model.length_regulator(S_alt, ylens=target_lengths, n_quantizers=3, f0=shifted_f0_alt)
+    if args.f0_guidance_scale != 1.0:
+        if not f0_condition:
+            raise ValueError("--f0-guidance-scale requires --f0-condition True")
+        cond_without_f0, *_ = model.length_regulator(
+            S_alt,
+            ylens=target_lengths,
+            n_quantizers=3,
+            f0=None,
+        )
+        cond = amplify_f0_condition(cond, cond_without_f0, args.f0_guidance_scale)
     prompt_condition, *_ = model.length_regulator(S_ori, ylens=target2_lengths, n_quantizers=3, f0=F0_ori)
 
     temporal_merge = None
@@ -336,6 +347,9 @@ def run(args: argparse.Namespace) -> Path:
         mode = "b"
     if temporal_schedule is not None:
         mode = f"{mode}_ttm1"
+    if args.f0_guidance_scale != 1.0:
+        scale_label = f"{args.f0_guidance_scale:.2f}".replace(".", "p")
+        mode = f"{mode}_f0g{scale_label}"
     out_path = out_dir / f"mosaic_p0_{mode}_{source_name}_{prompt_name}_{args.diffusion_steps}.wav"
     torchaudio.save(str(out_path), output_audio.cpu(), sr)
     if temporal_summary is not None:
@@ -357,6 +371,7 @@ def run(args: argparse.Namespace) -> Path:
     print(f"K/V LoRA: {args.kv_lora or 'none'}")
     print(f"Temporal query: {args.temporal_query or 'none'}")
     print(f"Temporal memory: {args.temporal_memory or 'none'}")
+    print(f"F0 guidance scale: {args.f0_guidance_scale:.3f}")
     return out_path
 
 
@@ -372,6 +387,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--f0-condition", type=str2bool, default=True)
     parser.add_argument("--auto-f0-adjust", type=str2bool, default=False)
     parser.add_argument("--semi-tone-shift", type=int, default=0)
+    parser.add_argument(
+        "--f0-guidance-scale",
+        type=float,
+        default=1.0,
+        help="Amplify the learned F0 component after length regulation; 1.0 preserves baseline behavior.",
+    )
     parser.add_argument("--checkpoint", type=str, default=None)
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--fp16", type=str2bool, default=True)
