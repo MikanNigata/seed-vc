@@ -203,6 +203,7 @@ def run(args: argparse.Namespace) -> Path:
             strength=args.prototype_strength,
         ).to(device)
 
+    auto_f0_shift_semitones = 0.0
     if f0_condition:
         F0_ori = f0_fn(prompt_16k[0], thred=0.03)
         F0_alt = f0_fn(source_16k[0], thred=0.03)
@@ -212,6 +213,14 @@ def run(args: argparse.Namespace) -> Path:
         voiced_F0_alt = F0_alt[F0_alt > 1]
         log_f0_alt = torch.log(F0_alt + 1e-5)
         if args.auto_f0_adjust and voiced_F0_ori.numel() > 0 and voiced_F0_alt.numel() > 0:
+            auto_f0_shift_semitones = float(
+                12.0
+                * (
+                    torch.median(torch.log(voiced_F0_ori + 1e-5))
+                    - torch.median(torch.log(voiced_F0_alt + 1e-5))
+                )
+                / np.log(2.0)
+            )
             log_f0_alt[F0_alt > 1] = (
                 log_f0_alt[F0_alt > 1]
                 - torch.median(torch.log(voiced_F0_alt + 1e-5))
@@ -372,6 +381,7 @@ def run(args: argparse.Namespace) -> Path:
     print(f"Temporal query: {args.temporal_query or 'none'}")
     print(f"Temporal memory: {args.temporal_memory or 'none'}")
     print(f"F0 guidance scale: {args.f0_guidance_scale:.3f}")
+    print(f"Auto F0 shift semitones: {auto_f0_shift_semitones:.4f}")
     return out_path
 
 
