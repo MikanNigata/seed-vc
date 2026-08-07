@@ -18,6 +18,13 @@ from mosaic_svc.p0.prototype_bank import PrototypeBank
 from mosaic_svc.p0.style_adapter import StyleAdapterConfig, install_style_slice_adapter
 from mosaic_svc.p4.prompt_mel_lora import PromptMelLoRAConfig, install_prompt_mel_lora
 from mosaic_svc.p5.kv_lora import install_kv_lora
+from mosaic_svc.temporal.style_schedule import (
+    TemporalStyleConfig,
+    build_temporal_style_schedule,
+    install_temporal_style_merge,
+    load_temporal_memory_records,
+    save_temporal_style_summary,
+)
 
 
 def _seed_all(seed: int) -> None:
@@ -53,6 +60,40 @@ def _semantic_with_overlap(semantic_fn, waves_16k: torch.Tensor, max_seconds: in
 def _style_from_audio(campplus_model, path: str, sr: int, device: torch.device, max_seconds: float = 25.0) -> torch.Tensor:
     audio = load_audio_tensor(path, sr=sr, device=device, max_seconds=max_seconds)
     return extract_campplus_style(campplus_model, audio, sr, device)
+
+
+def _temporal_embedding_loader(
+    memory: str,
+    campplus_model,
+    sr: int,
+    device: torch.device,
+    context_seconds: float,
+):
+    if context_seconds <= 0:
+        raise ValueError("--temporal-context-seconds must be positive")
+    root, metadata, _ = load_temporal_memory_records(memory)
+    source_path = Path(str(metadata.get("source_path", "")))
+    source_audio = None
+    if source_path.is_file():
+        source_audio = librosa.load(str(source_path), sr=sr, mono=True)[0]
+
+    def load(record: dict) -> torch.Tensor:
+        clip = None
+        if source_audio is not None:
+            center = (float(record["start_seconds"]) + float(record["end_seconds"])) / 2.0
+            clip_samples = max(1, int(round(context_seconds * sr)))
+            start = max(0, int(round(center * sr)) - clip_samples // 2)
+            start = min(start, max(0, len(source_audio) - clip_samples))
+            clip = source_audio[start : start + clip_samples]
+        if clip is None or len(clip) < int(0.25 * sr):
+            patch_path = (root / str(record["audio_path"])).resolve()
+            if not patch_path.is_file():
+                raise FileNotFoundError(f"Temporal patch audio does not exist: {patch_path}")
+            clip = librosa.load(str(patch_path), sr=sr, mono=True)[0]
+        audio = torch.tensor(clip).unsqueeze(0).float().to(device)
+        return extract_campplus_style(campplus_model, audio, sr, device)
+
+    return load
 
 
 @torch.no_grad()
@@ -187,6 +228,38 @@ def run(args: argparse.Namespace) -> Path:
     cond, *_ = model.length_regulator(S_alt, ylens=target_lengths, n_quantizers=3, f0=shifted_f0_alt)
     prompt_condition, *_ = model.length_regulator(S_ori, ylens=target2_lengths, n_quantizers=3, f0=F0_ori)
 
+    temporal_merge = None
+    temporal_schedule = None
+    temporal_summary = None
+    if bool(args.temporal_query) != bool(args.temporal_memory):
+        raise ValueError("--temporal-query and --temporal-memory must be provided together")
+    if args.temporal_query:
+        temporal_config = TemporalStyleConfig(
+            style_dim=style2.size(-1),
+            max_gate=args.temporal_max_gate,
+            max_norm_ratio=args.temporal_max_norm_ratio,
+            strength=args.temporal_strength,
+            min_confidence=args.temporal_min_confidence,
+            smoothing_seconds=args.temporal_smoothing_seconds,
+        )
+        embedding_loader = _temporal_embedding_loader(
+            args.temporal_memory,
+            campplus_model,
+            sr,
+            device,
+            args.temporal_context_seconds,
+        )
+        temporal_schedule, temporal_summary = build_temporal_style_schedule(
+            args.temporal_query,
+            args.temporal_memory,
+            style2,
+            embedding_loader,
+            source_frames=cond.size(1),
+            config=temporal_config,
+        )
+        temporal_schedule = temporal_schedule.to(device)
+        temporal_merge = install_temporal_style_merge(model, style_dim=style2.size(-1))
+
     max_source_window = max_context_window - mel2.size(2)
     if max_source_window <= 0:
         raise ValueError("prompt is too long for max_context_window; reduce --prompt-seconds")
@@ -201,6 +274,10 @@ def run(args: argparse.Namespace) -> Path:
         chunk_cond = cond[:, processed_frames : processed_frames + max_source_window]
         is_last_chunk = processed_frames + max_source_window >= cond.size(1)
         cat_condition = torch.cat([prompt_condition, chunk_cond], dim=1)
+        if temporal_merge is not None:
+            chunk_style = temporal_schedule[:, processed_frames : processed_frames + chunk_cond.size(1)]
+            prompt_style = style2[:, None, :].expand(-1, prompt_condition.size(1), -1)
+            temporal_merge.set_schedule(torch.cat([prompt_style, chunk_style], dim=1))
 
         with torch.autocast(device_type=device.type, dtype=torch.float16 if args.fp16 else torch.float32):
             vc_target = model.cfm.inference(
@@ -235,6 +312,9 @@ def run(args: argparse.Namespace) -> Path:
             previous_chunk = vc_wave[0, -overlap_wave_len:]
         processed_frames += vc_target.size(2) - overlap_frame_len
 
+    if temporal_merge is not None:
+        temporal_merge.set_schedule(None)
+
     output_audio = torch.from_numpy(np.concatenate(generated_wave_chunks)).float().unsqueeze(0)
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -254,8 +334,20 @@ def run(args: argparse.Namespace) -> Path:
         mode = "c"
     else:
         mode = "b"
+    if temporal_schedule is not None:
+        mode = f"{mode}_ttm1"
     out_path = out_dir / f"mosaic_p0_{mode}_{source_name}_{prompt_name}_{args.diffusion_steps}.wav"
     torchaudio.save(str(out_path), output_audio.cpu(), sr)
+    if temporal_summary is not None:
+        temporal_summary.update(
+            {
+                "query_path": str(Path(args.temporal_query).resolve()),
+                "memory_path": str(Path(args.temporal_memory).resolve()),
+                "context_seconds": args.temporal_context_seconds,
+                "output_path": str(out_path.resolve()),
+            }
+        )
+        save_temporal_style_summary(temporal_summary, out_path.with_suffix(".temporal.json"))
     print(f"Saved: {out_path}")
     print(f"Elapsed seconds: {time.time() - t0:.2f}")
     print(f"Style source: {style_audio}")
@@ -263,6 +355,8 @@ def run(args: argparse.Namespace) -> Path:
     print(f"Prompt adapter: {args.prompt_adapter or 'none'}")
     print(f"Prompt-mel LoRA: {args.prompt_mel_lora or 'none'}")
     print(f"K/V LoRA: {args.kv_lora or 'none'}")
+    print(f"Temporal query: {args.temporal_query or 'none'}")
+    print(f"Temporal memory: {args.temporal_memory or 'none'}")
     return out_path
 
 
@@ -308,6 +402,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--prompt-mel-lora-initial-scale", type=float, default=0.02)
     parser.add_argument("--prompt-mel-lora-max-scale", type=float, default=0.10)
     parser.add_argument("--kv-lora", default=None)
+    parser.add_argument("--temporal-query", default=None)
+    parser.add_argument("--temporal-memory", default=None)
+    parser.add_argument("--temporal-strength", type=float, default=1.0)
+    parser.add_argument("--temporal-max-gate", type=float, default=0.25)
+    parser.add_argument("--temporal-max-norm-ratio", type=float, default=0.10)
+    parser.add_argument("--temporal-min-confidence", type=float, default=0.45)
+    parser.add_argument("--temporal-smoothing-seconds", type=float, default=0.50)
+    parser.add_argument("--temporal-context-seconds", type=float, default=2.0)
     return parser
 
 

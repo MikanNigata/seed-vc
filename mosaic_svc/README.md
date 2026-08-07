@@ -1,5 +1,13 @@
 # Mosaic-SVC Seed-Only Extension Notes
 
+## Temporal Timbre Memory P1
+
+TTM-P1 can replace Seed-VC's repeated global style slice with a bounded, confidence-gated per-frame schedule derived from a TTM query. Content, F0, prompt mel, DiT, and vocoder remain frozen. See [the P1 design and usage guide](temporal/README.md).
+
+This path is experimental. Safe defaults limit the effective canonical-style deviation to approximately 2.5%; stronger settings are diagnostic only.
+
+---
+
 This fork keeps upstream Seed-VC intact and adds Mosaic-SVC as an extension package.
 
 ## Active Scope
