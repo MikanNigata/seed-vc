@@ -314,6 +314,12 @@ def run(args: argparse.Namespace) -> Path:
             max_norm_ratio=args.temporal_max_norm_ratio,
             strength=args.temporal_strength,
             min_confidence=args.temporal_min_confidence,
+            min_source_f0_confidence=args.temporal_min_source_f0_confidence,
+            min_patch_f0_confidence=args.temporal_min_patch_f0_confidence,
+            min_patch_quality=args.temporal_min_patch_quality,
+            min_weight_margin=args.temporal_min_weight_margin,
+            max_register_distance=args.temporal_max_register_distance,
+            max_voiced_ratio_distance=args.temporal_max_voiced_ratio_distance,
             smoothing_seconds=args.temporal_smoothing_seconds,
         )
         embedding_loader = _temporal_embedding_loader(
@@ -550,6 +556,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--temporal-max-gate", type=float, default=0.25)
     parser.add_argument("--temporal-max-norm-ratio", type=float, default=0.10)
     parser.add_argument("--temporal-min-confidence", type=float, default=0.45)
+    parser.add_argument("--temporal-min-source-f0-confidence", type=float, default=0.35)
+    parser.add_argument("--temporal-min-patch-f0-confidence", type=float, default=0.50)
+    parser.add_argument("--temporal-min-patch-quality", type=float, default=0.90)
+    parser.add_argument("--temporal-min-weight-margin", type=float, default=0.015)
+    parser.add_argument("--temporal-max-register-distance", type=float, default=0.20)
+    parser.add_argument("--temporal-max-voiced-ratio-distance", type=float, default=0.35)
     parser.add_argument("--temporal-smoothing-seconds", type=float, default=0.50)
     parser.add_argument("--temporal-context-seconds", type=float, default=2.0)
     return parser

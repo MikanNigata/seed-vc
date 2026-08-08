@@ -27,11 +27,17 @@ The CFG null branch keeps its zero style and is never replaced by the target sch
 max_gate:              0.25
 max_norm_ratio:        0.10
 min_confidence:        0.45
+min_source_f0_conf:    0.35
+min_patch_f0_conf:     0.50
+min_patch_quality:     0.90
+min_weight_margin:     0.015
+max_register_distance: 0.20
+max_voiced_ratio_diff: 0.35
 smoothing_seconds:     0.50
 patch_context_seconds: 2.0
 ```
 
-The maximum effective deviation from canonical style is approximately `0.25 * 0.10 = 2.5%` of the canonical vector norm. Frames below the confidence threshold use canonical style exactly.
+The maximum effective deviation from canonical style is approximately `0.25 * 0.10 = 2.5%` of the canonical vector norm. Frames below the confidence threshold, with ambiguous top candidates, low F0 confidence, mismatched voicing/register, or low-quality target patches use canonical style exactly. Rejection reasons are counted in the sibling `.temporal.json` report.
 
 ## Inference
 

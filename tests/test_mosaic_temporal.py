@@ -118,3 +118,34 @@ def test_low_confidence_schedule_is_canonical(tmp_path: Path) -> None:
     torch.testing.assert_close(schedule, canonical[:, None, :].expand(-1, 8, -1))
     assert summary["active_query_frames"] == 0
     assert summary["mean_gate"] == 0.0
+
+
+def test_f0_gate_falls_back_to_canonical(tmp_path: Path) -> None:
+    query, memory = _write_temporal_files(tmp_path, [0.9])
+    row = json.loads(query.read_text(encoding="utf-8"))
+    row["source_features"] = {
+        "f0_valid": True,
+        "f0_confidence": 0.20,
+        "relative_register": 0.20,
+        "voiced_ratio": 0.90,
+    }
+    row["candidates"][0]["target_features"] = {
+        "f0_valid": True,
+        "f0_confidence": 0.90,
+        "relative_register": 0.22,
+        "voiced_ratio": 0.92,
+    }
+    query.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    canonical = torch.arange(4, dtype=torch.float32).unsqueeze(0)
+    schedule, summary = build_temporal_style_schedule(
+        query,
+        memory,
+        canonical,
+        lambda record: torch.full((1, 4), 100.0),
+        source_frames=8,
+        config=TemporalStyleConfig(style_dim=4),
+    )
+
+    torch.testing.assert_close(schedule, canonical[:, None, :].expand(-1, 8, -1))
+    assert summary["active_query_frames"] == 0
+    assert summary["gate_rejections"]["source_f0_confidence"] == 1
