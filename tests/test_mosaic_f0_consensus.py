@@ -48,3 +48,30 @@ def test_non_octave_pitch_difference_is_preserved() -> None:
         frame_seconds=0.01,
     )
     assert not correction.any()
+
+
+def test_upward_correction_above_target_register_is_rejected() -> None:
+    rmvpe = np.full(20, 495.0)
+    anchor = np.full(20, 990.0)
+    correction, regions = build_octave_correction(
+        rmvpe,
+        anchor,
+        np.ones(20),
+        frame_seconds=0.01,
+        config=F0ConsensusConfig(max_upward_anchor_hz=700.0),
+    )
+    assert not correction.any()
+    assert regions == []
+
+
+def test_upward_correction_inside_target_register_is_allowed() -> None:
+    rmvpe = np.full(20, 220.0)
+    anchor = np.full(20, 440.0)
+    correction, _ = build_octave_correction(
+        rmvpe,
+        anchor,
+        np.ones(20),
+        frame_seconds=0.01,
+        config=F0ConsensusConfig(max_upward_anchor_hz=700.0),
+    )
+    np.testing.assert_array_equal(correction, np.ones(20, dtype=np.int8))

@@ -131,7 +131,7 @@ python -m mosaic_svc.p0.infer_p0 `
   --f0-consensus-lock True
 ```
 
-The lock changes RMVPE only when a high-confidence pYIN anchor disagrees by an integer octave for a sustained region. It does not snap normal pitch movement or apply a global key shift. A sibling `.f0consensus.json` report records every corrected region.
+The lock changes RMVPE only when a high-confidence pYIN anchor disagrees by an integer octave for a sustained region. Upward corrections above the target prompt's high-confidence register are rejected by default, because pitch estimators can follow a second harmonic and exact source-F0 preservation can also exceed the target's supported range. It does not snap normal pitch movement or apply a global key shift. A sibling `.f0consensus.json` report records every corrected region.
 
 Audit target clips:
 

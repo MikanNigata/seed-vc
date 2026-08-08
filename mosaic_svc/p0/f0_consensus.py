@@ -18,6 +18,7 @@ class F0ConsensusConfig:
     fmax_hz: float = 1600.0
     frame_length: int = 2048
     hop_length: int = 512
+    max_upward_anchor_hz: float | None = None
 
     def validate(self) -> None:
         if not 0.0 <= self.min_anchor_probability <= 1.0:
@@ -28,6 +29,36 @@ class F0ConsensusConfig:
             raise ValueError("min_region_seconds must be non-negative")
         if self.max_octaves <= 0:
             raise ValueError("max_octaves must be positive")
+        if self.max_upward_anchor_hz is not None and self.max_upward_anchor_hz <= 0.0:
+            raise ValueError("max_upward_anchor_hz must be positive when provided")
+
+
+def estimate_target_f0_ceiling(
+    audio: np.ndarray,
+    sr: int,
+    *,
+    quantile: float = 0.99,
+    margin_semitones: float = 2.0,
+    min_probability: float = 0.80,
+    fmin_hz: float = 65.0,
+    fmax_hz: float = 1600.0,
+) -> float | None:
+    """Estimate a conservative upper register bound from a target reference."""
+    if not 0.0 < quantile <= 1.0:
+        raise ValueError("quantile must be in (0, 1]")
+    if margin_semitones < 0.0:
+        raise ValueError("margin_semitones must be non-negative")
+    f0, voiced, probability = librosa.pyin(
+        np.asarray(audio, dtype=np.float32).reshape(-1),
+        fmin=fmin_hz,
+        fmax=fmax_hz,
+        sr=sr,
+    )
+    valid = voiced & np.isfinite(f0) & (probability >= min_probability)
+    if np.count_nonzero(valid) < 5:
+        return None
+    ceiling = float(np.quantile(f0[valid], quantile))
+    return ceiling * float(2.0 ** (margin_semitones / 12.0))
 
 
 def _regions(values: np.ndarray) -> list[tuple[int, int, int]]:
@@ -72,6 +103,8 @@ def build_octave_correction(
     rounded = np.rint(delta / 12.0).astype(np.int8)
     eligible = valid & (rounded != 0) & (np.abs(rounded) <= config.max_octaves)
     eligible &= np.abs(delta - rounded * 12.0) <= config.octave_tolerance_semitones
+    if config.max_upward_anchor_hz is not None:
+        eligible &= (rounded < 1) | (anchor <= config.max_upward_anchor_hz)
     proposed = np.where(eligible, rounded, 0).astype(np.int8)
 
     minimum_frames = max(1, int(round(config.min_region_seconds / max(frame_seconds, 1e-6))))

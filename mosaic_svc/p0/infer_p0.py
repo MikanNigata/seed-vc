@@ -16,6 +16,7 @@ from mosaic_svc.p0.audio_features import extract_campplus_style, load_audio_tens
 from mosaic_svc.p0.f0_embedding_adapter import install_f0_embedding_adapter
 from mosaic_svc.p0.f0_consensus import (
     F0ConsensusConfig,
+    estimate_target_f0_ceiling,
     lock_rmvpe_with_pyin,
     save_f0_consensus_report,
 )
@@ -255,6 +256,15 @@ def run(args: argparse.Namespace) -> Path:
         F0_ori = f0_fn(prompt_16k[0], thred=0.03)
         F0_alt = f0_fn(source_16k[0], thred=0.03)
         if args.f0_consensus_lock:
+            target_f0_ceiling = None
+            if args.f0_consensus_target_register_gate:
+                target_f0_ceiling = estimate_target_f0_ceiling(
+                    prompt_audio_np[: int(sr * args.prompt_seconds)],
+                    sr,
+                    quantile=args.f0_consensus_register_quantile,
+                    margin_semitones=args.f0_consensus_register_margin_semitones,
+                    min_probability=args.f0_consensus_min_probability,
+                )
             F0_alt, f0_consensus_report = lock_rmvpe_with_pyin(
                 F0_alt,
                 source_audio_np,
@@ -263,6 +273,7 @@ def run(args: argparse.Namespace) -> Path:
                     min_anchor_probability=args.f0_consensus_min_probability,
                     octave_tolerance_semitones=args.f0_consensus_octave_tolerance,
                     min_region_seconds=args.f0_consensus_min_region_seconds,
+                    max_upward_anchor_hz=target_f0_ceiling,
                 ),
             )
         F0_ori = torch.from_numpy(F0_ori).to(device)[None]
@@ -541,6 +552,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--f0-consensus-min-probability", type=float, default=0.80)
     parser.add_argument("--f0-consensus-octave-tolerance", type=float, default=2.0)
     parser.add_argument("--f0-consensus-min-region-seconds", type=float, default=0.05)
+    parser.add_argument("--f0-consensus-target-register-gate", type=str2bool, default=True)
+    parser.add_argument("--f0-consensus-register-quantile", type=float, default=0.99)
+    parser.add_argument(
+        "--f0-consensus-register-margin-semitones", type=float, default=2.0
+    )
     parser.add_argument(
         "--f0-guidance-scale",
         type=float,
