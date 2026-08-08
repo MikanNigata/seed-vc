@@ -14,11 +14,11 @@ from scipy.ndimage import median_filter
 @dataclass(frozen=True)
 class F0GuardConfig:
     min_confidence: float = 0.80
-    min_error_semitones: float = 3.0
+    min_error_semitones: float = 7.0
     max_correction_semitones: float = 12.0
-    min_region_seconds: float = 0.10
+    min_region_seconds: float = 0.15
     fade_seconds: float = 0.05
-    strength: float = 0.85
+    strength: float = 0.75
     fmin_hz: float = 65.0
     fmax_hz: float = 2100.0
 
@@ -202,11 +202,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--candidate", required=True, help="Converted vocal to correct.")
     parser.add_argument("--output", required=True)
     parser.add_argument("--min-confidence", type=float, default=0.80)
-    parser.add_argument("--min-error-semitones", type=float, default=3.0)
+    parser.add_argument("--min-error-semitones", type=float, default=7.0)
     parser.add_argument("--max-correction-semitones", type=float, default=12.0)
-    parser.add_argument("--min-region-seconds", type=float, default=0.10)
+    parser.add_argument("--min-region-seconds", type=float, default=0.15)
     parser.add_argument("--fade-seconds", type=float, default=0.05)
-    parser.add_argument("--strength", type=float, default=0.85)
+    parser.add_argument("--strength", type=float, default=0.75)
     return parser
 
 
