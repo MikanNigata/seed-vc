@@ -109,6 +109,18 @@ Current decision after this check: prioritize high-quality prompt mel/semantic s
 
 ## P0 Commands
 
+Automatically select the prompt that best preserves the current song's F0 while retaining target identity:
+
+```powershell
+D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.auto_prompt_select `
+  --source D:\voice-lab\data\guide_vocals\song.wav `
+  --prompt "D:\voice-lab\out\mosaic_svc\p0\prompt_candidates\dadadada_12s\*.wav" `
+  --profile D:\voice-lab\out\mosaic_svc\speaker_profiles\target_singing_profile.pt `
+  --output D:\voice-lab\out\mosaic_svc\prompt_selection\song
+```
+
+The selector extracts a challenging 30-second source probe, renders every prompt at 20 steps, and ranks them using F0 RMSE, F0 correlation, UV retention, and CAMPPlus target identity. It then renders the winner over the original input at 60 steps. Pass `--render-winner false` to perform selection only.
+
 Audit target clips:
 
 ```powershell
