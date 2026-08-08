@@ -14,6 +14,11 @@ import inference as seed_inference
 from modules.commons import str2bool
 from mosaic_svc.p0.audio_features import extract_campplus_style, load_audio_tensor
 from mosaic_svc.p0.f0_embedding_adapter import install_f0_embedding_adapter
+from mosaic_svc.p0.f0_consensus import (
+    F0ConsensusConfig,
+    lock_rmvpe_with_pyin,
+    save_f0_consensus_report,
+)
 from mosaic_svc.p0.f0_condition_adapter import load_f0_condition_adapter
 from mosaic_svc.p0.f0_block_adapter import install_f0_block_adapter
 from mosaic_svc.p0.f0_dit_adapter import install_f0_dit_adapter
@@ -245,9 +250,21 @@ def run(args: argparse.Namespace) -> Path:
         ).to(device)
 
     auto_f0_shift_semitones = 0.0
+    f0_consensus_report = None
     if f0_condition:
         F0_ori = f0_fn(prompt_16k[0], thred=0.03)
         F0_alt = f0_fn(source_16k[0], thred=0.03)
+        if args.f0_consensus_lock:
+            F0_alt, f0_consensus_report = lock_rmvpe_with_pyin(
+                F0_alt,
+                source_audio_np,
+                sr,
+                F0ConsensusConfig(
+                    min_anchor_probability=args.f0_consensus_min_probability,
+                    octave_tolerance_semitones=args.f0_consensus_octave_tolerance,
+                    min_region_seconds=args.f0_consensus_min_region_seconds,
+                ),
+            )
         F0_ori = torch.from_numpy(F0_ori).to(device)[None]
         F0_alt = torch.from_numpy(F0_alt).to(device)[None]
         voiced_F0_ori = F0_ori[F0_ori > 1]
@@ -472,6 +489,17 @@ def run(args: argparse.Namespace) -> Path:
             }
         )
         save_temporal_style_summary(temporal_summary, out_path.with_suffix(".temporal.json"))
+    if f0_consensus_report is not None:
+        f0_consensus_report.update(
+            {
+                "source_path": str(Path(args.source).resolve()),
+                "output_path": str(out_path.resolve()),
+            }
+        )
+        save_f0_consensus_report(
+            f0_consensus_report,
+            out_path.with_suffix(".f0consensus.json"),
+        )
     print(f"Saved: {out_path}")
     print(f"Elapsed seconds: {time.time() - t0:.2f}")
     print(f"Style source: {style_audio}")
@@ -483,6 +511,9 @@ def run(args: argparse.Namespace) -> Path:
     print(f"Temporal memory: {args.temporal_memory or 'none'}")
     print(f"F0 guidance scale: {args.f0_guidance_scale:.3f}")
     print(f"Auto F0 shift semitones: {auto_f0_shift_semitones:.4f}")
+    print(f"F0 consensus lock: {args.f0_consensus_lock}")
+    if f0_consensus_report is not None:
+        print(f"F0 consensus corrected ratio: {f0_consensus_report['corrected_ratio']:.4f}")
     print(f"F0 embedding adapter: {args.f0_embedding_adapter or 'none'}")
     print(f"F0 embedding adapter strength: {args.f0_embedding_adapter_strength:g}")
     print(f"F0 condition adapter: {args.f0_condition_adapter or 'none'}")
@@ -506,6 +537,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--f0-condition", type=str2bool, default=True)
     parser.add_argument("--auto-f0-adjust", type=str2bool, default=False)
     parser.add_argument("--semi-tone-shift", type=int, default=0)
+    parser.add_argument("--f0-consensus-lock", type=str2bool, default=False)
+    parser.add_argument("--f0-consensus-min-probability", type=float, default=0.80)
+    parser.add_argument("--f0-consensus-octave-tolerance", type=float, default=2.0)
+    parser.add_argument("--f0-consensus-min-region-seconds", type=float, default=0.05)
     parser.add_argument(
         "--f0-guidance-scale",
         type=float,
