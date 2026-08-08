@@ -172,6 +172,15 @@ def run(args: argparse.Namespace) -> Path:
             }
         )
     ranked = rank_candidates(rows)
+    acceptable = [
+        row
+        for row in ranked
+        if row["cent_rmse"] <= args.max_probe_cent_rmse
+        and row["f0_corr"] >= args.min_probe_f0_corr
+        and row["uv_mismatch"] <= args.max_probe_uv_mismatch
+    ]
+    accepted = bool(acceptable)
+    winner = acceptable[0] if accepted else ranked[0]
     ranking_path = output_dir / "prompt_ranking.csv"
     with ranking_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(ranked[0].keys()))
@@ -179,7 +188,7 @@ def run(args: argparse.Namespace) -> Path:
         writer.writerows(ranked)
 
     winner_output = None
-    if args.render_winner:
+    if args.render_winner and accepted:
         final_dir = output_dir / "final"
         command = [
             sys.executable,
@@ -188,7 +197,7 @@ def run(args: argparse.Namespace) -> Path:
             "--source",
             str(source),
             "--prompt",
-            ranked[0]["prompt"],
+            winner["prompt"],
             "--output",
             str(final_dir),
             "--diffusion-steps",
@@ -214,14 +223,26 @@ def run(args: argparse.Namespace) -> Path:
         "source": str(source),
         "probe_start_seconds": probe_start,
         "probe_seconds": len(probe) / sr,
-        "winner_prompt": ranked[0]["prompt"],
-        "winner_score": ranked[0]["selection_score"],
+        "winner_prompt": winner["prompt"],
+        "winner_score": winner["selection_score"],
         "winner_output": winner_output,
+        "accepted": accepted,
+        "rejection_reason": None
+        if accepted
+        else (
+            "no prompt passed probe gate: "
+            f"cent_rmse<={args.max_probe_cent_rmse}, "
+            f"f0_corr>={args.min_probe_f0_corr}, "
+            f"uv_mismatch<={args.max_probe_uv_mismatch}"
+        ),
         "ranking": ranked,
     }
     summary_path = output_dir / "selection.json"
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"Selected prompt: {ranked[0]['prompt']}")
+    if accepted:
+        print(f"Selected prompt: {winner['prompt']}")
+    else:
+        print("No prompt passed the probe quality gate; final render skipped")
     print(f"Ranking: {ranking_path}")
     return summary_path
 
@@ -241,6 +262,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--probe-steps", type=int, default=20)
     parser.add_argument("--render-winner", type=str2bool, default=True)
     parser.add_argument("--final-steps", type=int, default=60)
+    parser.add_argument("--max-probe-cent-rmse", type=float, default=250.0)
+    parser.add_argument("--min-probe-f0-corr", type=float, default=0.85)
+    parser.add_argument("--max-probe-uv-mismatch", type=float, default=0.20)
     parser.add_argument("--inference-cfg-rate", type=float, default=0.5)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--checkpoint", default=None)

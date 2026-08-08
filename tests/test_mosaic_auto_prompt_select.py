@@ -22,3 +22,12 @@ def test_select_probe_returns_requested_duration() -> None:
     probe, start = select_probe(audio, sr, seconds=5.0, hop_seconds=1.0)
     assert len(probe) == sr * 5
     assert 0.0 <= start <= 7.0
+
+
+def test_composite_score_does_not_hide_a_probe_gate_failure() -> None:
+    rows = [
+        {"name": "bad", "cent_rmse": 440.0, "f0_corr": 0.54, "uv_mismatch": 0.09, "identity_similarity": 0.72},
+    ]
+    ranked = rank_candidates(rows)
+    assert ranked[0]["selection_score"] > 0.0
+    assert ranked[0]["cent_rmse"] > 250.0

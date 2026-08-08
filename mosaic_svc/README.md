@@ -119,7 +119,7 @@ D:\voice-lab\seed-vc\.venv\Scripts\python.exe -m mosaic_svc.p0.auto_prompt_selec
   --output D:\voice-lab\out\mosaic_svc\prompt_selection\song
 ```
 
-The selector extracts a challenging 30-second source probe, renders every prompt at 20 steps, and ranks them using F0 RMSE, F0 correlation, UV retention, and CAMPPlus target identity. It then renders the winner over the original input at 60 steps. Pass `--render-winner false` to perform selection only.
+The selector extracts a challenging 30-second source probe, renders every prompt at 20 steps, and ranks them using F0 RMSE, F0 correlation, UV retention, and CAMPPlus target identity. It only renders the winner over the original input at 60 steps when the probe passes the default quality gate (`cent_rmse <= 250`, `f0_corr >= 0.85`, `uv_mismatch <= 0.20`). Otherwise it records a rejection and skips the final render. Pass `--render-winner false` to perform selection only.
 
 Audit target clips:
 
